@@ -1,0 +1,13 @@
+# Virtual Environment
+.venv/
+venv/
+__pycache__/
+
+# IDE / Editor specific
+.vscode/
+.idea/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/

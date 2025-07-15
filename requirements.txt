@@ -1,0 +1,31 @@
+# requirements.txt
+
+# Core ML and RL
+gymnasium==0.29.1
+ale-py==0.8.1
+torch
+torchvision
+torchaudio
+numpy==1.26.4
+
+# Hyperparameter Optimization and Utilities
+optuna
+tqdm
+PyYAML
+opencv-python
+
+# Code Quality
+black
+ruff
+
+# Visualization and Monitoring
+matplotlib
+tensorboard
+imageio
+imageio[ffmpeg]
+
+# Additional Dependencies
+setuptools==68.2.2
+shimmy==0.2.1
+autorom==0.4.2
+AutoROM.accept-rom-license==0.6.1

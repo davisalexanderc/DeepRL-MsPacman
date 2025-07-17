@@ -206,3 +206,16 @@ class DQNAgent:
         """
 
         self.q_target_net.load_state_dict(self.q_policy_net.state_dict())
+
+    def save(self, path):
+        """
+        Save the policy network's weights to a file.
+
+        Parameters:
+        - path (str): The file path to save the model.
+
+        Returns:
+        - None
+        """
+        torch.save(self.q_policy_net.state_dict(), path)
+        print(f"Model saved to {path}")

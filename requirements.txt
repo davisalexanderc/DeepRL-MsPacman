@@ -24,6 +24,7 @@ matplotlib
 tensorboard
 imageio
 imageio[ffmpeg]
+moviepy
 
 # Additional Dependencies
 setuptools==68.2.2

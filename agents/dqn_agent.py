@@ -14,8 +14,8 @@ class QNetwork(nn.Module):
     The Q-Network for the DQN agent. This is a simple convolutional neural network
     that takes stacked frames as input and outputs Q-values for each action.
     """
-    
-    def __init__(self, input_shape, num_actions):
+
+    def __init__(self, input_shape: tuple, num_actions: int) -> None:
         """
         Initialize the Q-Network.
         
@@ -47,7 +47,7 @@ class QNetwork(nn.Module):
             nn.Linear(512, num_actions)
         )
 
-    def _get_conv_out_size(self, input_shape):
+    def _get_conv_out_size(self, input_shape: tuple) -> int:
         """
         Calculate the output size of the convolutional layers given the input shape.
         
@@ -62,7 +62,7 @@ class QNetwork(nn.Module):
         
         return int(torch.prod(torch.tensor(conv_out.size())))
     
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Forward pass through the network.
         
@@ -88,8 +88,8 @@ class DQNAgent:
     The DQN agent that interacts with the environment and learns from experiences.
     """
 
-    def __init__(self, input_shape, num_actions, replay_buffer_capacity, 
-                 batch_size, learning_rate, gamma, device):
+    def __init__(self, input_shape: tuple, num_actions: int, replay_buffer_capacity: int, 
+                 batch_size: int, learning_rate: float, gamma: float, device: torch.device) -> None:
         """
         Initialize the DQN agent.
 
@@ -127,7 +127,7 @@ class DQNAgent:
         # Create the replay buffer
         self.replay_buffer = ReplayBuffer(replay_buffer_capacity, batch_size=batch_size)
 
-    def act(self, state, epsilon):
+    def act(self, state: torch.Tensor, epsilon: float) -> int:
         """
         Select an action based on the current state and epsilon-greedy policy.
 
@@ -145,16 +145,12 @@ class DQNAgent:
             action = random.randint(0, self.num_actions - 1)
 
         else: # Exploitation
-            state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0) / 255.0
-
-            with torch.no_grad(): # Disable gradient calculations for action selection
-                q_values = self.q_policy_net(state_tensor)
-
-            action = q_values.max(1)[1].item() # Select the action with the highest Q-value
+            # Select the action with the highest Q-value
+            action = self.get_greedy_action(state)
 
         return action
-    
-    def learn(self):
+
+    def learn(self) -> float:
         """
         Sample a batch of experiences from the replay buffer and update the policy network.
 
@@ -193,8 +189,8 @@ class DQNAgent:
         self.optimizer.step() # Update the policy network weights
 
         return loss.item()
-    
-    def update_target_network(self):
+
+    def update_target_network(self) -> None:
         """
         Update the target network by copying the weights from the policy network.
 
@@ -207,7 +203,7 @@ class DQNAgent:
 
         self.q_target_net.load_state_dict(self.q_policy_net.state_dict())
 
-    def save(self, path):
+    def save(self, path: str) -> None:
         """
         Save the policy network's weights to a file.
 
@@ -218,4 +214,24 @@ class DQNAgent:
         - None
         """
         torch.save(self.q_policy_net.state_dict(), path)
-        print(f"Model saved to {path}")
+        print(f"\nModel saved to {path}")
+
+    def get_greedy_action(self, state: np.ndarray) -> int:
+        """
+        Get the greedy action (action with highest Q-value) for a given state.
+
+        Parameters:
+        - state (np.ndarray): The current state of the environment.
+
+        Returns:
+        - action (int): The action with the highest Q-value.
+        """
+
+        state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0) / 255.0
+
+        with torch.no_grad():
+            q_values = self.q_policy_net(state_tensor)
+
+        action = q_values.max(1)[1].item()
+
+        return action

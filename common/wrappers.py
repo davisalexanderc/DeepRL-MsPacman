@@ -109,3 +109,98 @@ class PreprocessAndStackFrames(gym.Wrapper):
         self.frames.append(self._preprocess(obs))
 
         return self._get_obs(), reward, terminated, truncated, info
+    
+class RewardWrapper(gym.Wrapper):
+    """
+    A wrapper to modify the reward structure of the environment by 
+    adding penalties for time and lives lost.
+    """
+
+    def __init__(self, env: gym.Env, 
+                 enable_time_penalty: bool = False,
+                 time_penalty_per_step: float = 0.0, 
+                 enable_death_penalty: bool = False,
+                 death_penalty: float = 0.0, 
+                ) -> None:
+        """
+        Initialize the RewardWrapper.
+        
+        Parameters:
+        - env (gym.Env): The environment to wrap.
+        - enable_time_penalty (bool): Whether to apply a time penalty per step.
+        - time_penalty_per_step (float): The penalty to apply for each step taken.
+        - enable_death_penalty (bool): Whether to apply a death penalty when a life is lost.
+        - death_penalty (float): The penalty to apply when a life is lost.
+
+        Returns:
+        - None
+        """
+
+        super().__init__(env)
+
+        # Store parameters
+        self.time_penalty_per_step = time_penalty_per_step
+        self.death_penalty = death_penalty
+        self.enable_time_penalty = enable_time_penalty
+        self.enable_death_penalty = enable_death_penalty
+
+        # Initialize current lives
+        self.current_lives = 0
+
+    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """
+        Take a step in the environment and modify the reward.
+        
+        Parameters:
+        - action: The action to take in the environment.
+        
+        Returns:
+        - obs: The observation after taking the action.
+        - modified_reward: The modified reward after applying penalties.
+        - terminated: Whether the episode has terminated.
+        - truncated: Whether the episode has been truncated.
+        - info: Additional information from the environment.
+        """
+
+        obs, reward, terminated, truncated, info = self.env.step(action)
+
+        # Initialize modified reward
+        modified_reward = reward
+
+        # Apply time penalty if enabled
+        if self.enable_time_penalty:
+            modified_reward += self.time_penalty_per_step
+
+        # Apply death penalty if enabled and a life was lost
+        if self.enable_death_penalty:
+            new_lives = info.get('ale.lives', 0)
+            # Compares current lives to new lives, this accounts for life gain and loss
+            if new_lives > self.current_lives:
+                self.current_lives = new_lives
+            elif new_lives < self.current_lives:
+                modified_reward += self.death_penalty
+                self.current_lives = new_lives
+
+        return obs, modified_reward, terminated, truncated, info
+    
+    def reset(self, **kwargs) -> tuple[np.ndarray, dict]:
+        """
+        Reset the environment and the current lives counter.
+        
+        Parameters:
+        - **kwargs: Additional keyword arguments for the reset method.
+        
+        Returns:
+        - obs: The initial observation after resetting the environment.
+        - info: Additional information from the environment.
+        """
+
+        # Reset the environment
+        obs, info = self.env.reset(**kwargs)
+
+        # Reset current lives
+        self.current_lives = info.get('ale.lives', 0)
+
+        return obs, info
+    
+    

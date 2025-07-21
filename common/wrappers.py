@@ -120,7 +120,9 @@ class RewardWrapper(gym.Wrapper):
                  enable_time_penalty: bool = False,
                  time_penalty_per_step: float = 0.0, 
                  enable_death_penalty: bool = False,
-                 death_penalty: float = 0.0, 
+                 death_penalty: float = 0.0,
+                 enable_level_completion_bonus: bool = False,
+                 level_completion_bonus: float = 0.0,
                 ) -> None:
         """
         Initialize the RewardWrapper.
@@ -131,6 +133,8 @@ class RewardWrapper(gym.Wrapper):
         - time_penalty_per_step (float): The penalty to apply for each step taken.
         - enable_death_penalty (bool): Whether to apply a death penalty when a life is lost.
         - death_penalty (float): The penalty to apply when a life is lost.
+        - enable_level_completion_bonus (bool): Whether to apply a bonus for level completion.
+        - level_completion_bonus (float): The bonus to apply when a level is completed.
 
         Returns:
         - None
@@ -143,9 +147,12 @@ class RewardWrapper(gym.Wrapper):
         self.death_penalty = death_penalty
         self.enable_time_penalty = enable_time_penalty
         self.enable_death_penalty = enable_death_penalty
+        self.enable_level_completion_bonus = enable_level_completion_bonus
+        self.level_completion_bonus = level_completion_bonus
 
         # Initialize current lives
         self.current_lives = 0
+        self.current_level = 0
 
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
         """
@@ -162,10 +169,12 @@ class RewardWrapper(gym.Wrapper):
         - info: Additional information from the environment.
         """
 
-        obs, reward, terminated, truncated, info = self.env.step(action)
+        obs, original_reward, terminated, truncated, info = self.env.step(action)
+        # Store original score for logging purposes
+        info['original_reward'] = original_reward
 
         # Initialize modified reward
-        modified_reward = reward
+        modified_reward = original_reward
 
         # Apply time penalty if enabled
         if self.enable_time_penalty:
@@ -180,6 +189,16 @@ class RewardWrapper(gym.Wrapper):
             elif new_lives < self.current_lives:
                 modified_reward += self.death_penalty
                 self.current_lives = new_lives
+
+        # Apply level completion bonus if enabled and the level is completed
+        if self.enable_level_completion_bonus:
+            new_level = self.env.unwrapped.ale.getRAM()[1]  # Get current level from RAM
+            if new_level > self.current_level:
+                current_score = self.env.unwrapped.ale.getScore()
+                print(f"[RewardWrapper] Level completed! Previous Level: {self.current_level}, New Level: {new_level}")
+                print(f"Total Score: {current_score}, Adding Bonus: {self.level_completion_bonus}")
+                modified_reward += self.level_completion_bonus
+                self.current_level = new_level
 
         return obs, modified_reward, terminated, truncated, info
     
@@ -200,6 +219,10 @@ class RewardWrapper(gym.Wrapper):
 
         # Reset current lives
         self.current_lives = info.get('ale.lives', 0)
+        self.current_level = self.env.unwrapped.ale.getRAM()[1] # Get current level from RAM
+
+        ###--- Debug ---###
+        #print(f"[RewardWrapper] Episode reset. Starting at Level: {self.current_level}")
 
         return obs, info
     

@@ -194,10 +194,9 @@ class RewardWrapper(gym.Wrapper):
         if self.enable_level_completion_bonus:
             new_level = self.env.unwrapped.ale.getRAM()[1]  # Get current level from RAM
             if new_level > self.current_level:
-                current_score = self.env.unwrapped.ale.getScore()
-                print(f"[RewardWrapper] Level completed! Previous Level: {self.current_level}, New Level: {new_level}")
-                print(f"Total Score: {current_score}, Adding Bonus: {self.level_completion_bonus}")
                 modified_reward += self.level_completion_bonus
+                print(f"[RewardWrapper] Level completed! Previous Level: {self.current_level}, New Level: {new_level}")
+                print(f"[RewardWrapper] Adding Bonus: {self.level_completion_bonus}")
                 self.current_level = new_level
 
         return obs, modified_reward, terminated, truncated, info

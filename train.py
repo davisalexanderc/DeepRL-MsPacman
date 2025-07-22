@@ -5,12 +5,13 @@ import torch
 import time
 import argparse  # Import the argument parsing library
 from pathlib import Path
+from torch.utils.tensorboard import SummaryWriter
 
 # Import our custom modules
 from common.wrappers import PreprocessAndStackFrames, RewardWrapper
-from common.utils import load_config
+from common.utils import load_config, setup_environment_and_agent
 from agents import create_agent  # Import our new factory function
-from torch.utils.tensorboard import SummaryWriter
+
 
 def train_agent(config: dict) -> None:
     """
@@ -32,33 +33,7 @@ def train_agent(config: dict) -> None:
     print(f"Using device: {device}")
 
     # --- 2. Create and Wrap the Environment ---
-    env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
-    
-    if config.get('enable_reward_shaping', False):
-        print("Reward Shaping Enabled.")
-        env = RewardWrapper(
-            env,
-            enable_level_completion_bonus=config.get('enable_level_completion_bonus', False),
-            level_completion_bonus=config.get('level_completion_bonus', 0.0),
-            enable_death_penalty=config.get('enable_death_penalty', False),
-            death_penalty=config.get('death_penalty', 0.0)
-        )
-
-    wrapped_env = PreprocessAndStackFrames(env, num_stack=4, shape=(84, 84))
-    print("Environment created and wrapped.")
-
-    # --- 3. Instantiate the Agent using the Factory ---
-    input_shape = wrapped_env.observation_space.shape
-    num_actions = wrapped_env.action_space.n
-    
-    agent = create_agent(
-        agent_name=config['agent'],
-        config=config,
-        input_shape=input_shape,
-        num_actions=num_actions,
-        device=device
-    )
-    print(f"{config['agent'].upper()} Agent instantiated.")
+    wrapped_env, agent, device = setup_environment_and_agent(config)
 
     # --- 4. Main Training Loop ---
     # (This is the same loop you wrote, just adapted slightly to be generic)

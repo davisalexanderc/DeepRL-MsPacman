@@ -25,6 +25,7 @@ tensorboard
 imageio
 imageio[ffmpeg]
 moviepy
+pandas
 
 # Additional Dependencies
 setuptools==68.2.2

@@ -6,7 +6,8 @@ import torch
 import numpy as np
 from gymnasium.wrappers import RecordVideo
 
-from common.wrappers import PreprocessAndStackFrames
+from common.wrappers import PreprocessAndStackFrames, RewardWrapper
+from agents import create_agent
 
 def load_config(config_path):
     """
@@ -58,3 +59,46 @@ def generate_video(agent, config: dict, timestep: int) -> None:
 
     video_env.close()
     print(f"--- Video saved to {video_folder} ---")
+
+def setup_environment_and_agent(config: dict) -> tuple:
+    """
+    Set up the environment and agent based on the provided configuration.
+
+    Parameters:
+    - config (dict): Configuration dictionary containing all necessary parameters.
+
+    Returns:
+    - env: The wrapped environment.
+    - agent: The instantiated agent.
+    - device: The device (CPU or GPU) on which the agent will run.
+    """
+    device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
+    env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
+    
+    if config.get('enable_reward_shaping', False):
+        print("Reward Shaping Enabled.")
+        env = RewardWrapper(
+            env,
+            enable_level_completion_bonus=config.get('enable_level_completion_bonus', False),
+            level_completion_bonus=config.get('level_completion_bonus', 0.0),
+            enable_death_penalty=config.get('enable_death_penalty', False),
+            death_penalty=config.get('death_penalty', 0.0)
+        )
+
+    wrapped_env = PreprocessAndStackFrames(env, num_stack=4, shape=(84, 84))
+
+    input_shape = wrapped_env.observation_space.shape
+    num_actions = wrapped_env.action_space.n
+    
+    agent = create_agent(
+        agent_name=config['agent'],
+        config=config,
+        input_shape=input_shape,
+        num_actions=num_actions,
+        device=device,
+    )
+    print(f"{config['agent'].upper()} Agent instantiated.")
+    
+    return wrapped_env, agent, device

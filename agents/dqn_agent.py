@@ -205,3 +205,18 @@ class DQNAgent:
                             [0, self.config['epsilon_decay_duration']],
                             [self.config['epsilon_start'], self.config['epsilon_end']])
         writer.add_scalar("charts/epsilon", epsilon, global_step=global_step)
+
+    def load(self, path: str) -> None:
+        """
+        Load the policy network's weights from a file.
+
+        Parameters:
+        - path (str): The file path to load the model from.
+
+        Returns:
+        - None
+        """
+        state_dict = torch.load(path, map_location=self.device)
+        self.q_policy_net.load_state_dict(state_dict)
+        self.q_target_net.load_state_dict(state_dict)
+        print(f"\nModel loaded from {path}")

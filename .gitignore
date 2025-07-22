@@ -11,3 +11,17 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+# Logs and experiment outputs
+runs/
+logs/
+
+# Checkpoints and saved models
+checkpoints/
+models/
+
+# Generated videos and images
+videos/
+
+# Colab and Jupyter specific
+.ipynb_checkpoints/

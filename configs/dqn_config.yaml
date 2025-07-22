@@ -1,7 +1,7 @@
 # configs/dqn_config.yaml
 
 # --- Experiment ---
-total_timesteps: 100000    # Total number of steps to train for (Change to 1_000_000 for full training)
+total_timesteps: 5000    # Total number of steps to train for (Change to 1_000_000 for full training)
 device: "cuda"            # "cuda" or "cpu"
 
 # --- Agent/Network ---
@@ -26,11 +26,11 @@ level_completion_bonus: 5000.0  # Bonus to apply when the agent completes the le
 # --- Replay Buffer & Learning Strategy ---
 replay_buffer_capacity: 10000  # Max number of experiences to store
 batch_size: 32                  # Number of experiences to sample for each learning step
-learning_starts: 50000          # Number of steps to take before learning starts (to populate the buffer)
+learning_starts: 1000          # Number of steps to take before learning starts (to populate the buffer)
 train_frequency: 4              # How often to perform a learning step (e.g., every 4 steps)
 
 # --- Target Network ---
-target_update_frequency: 10000   # How often to update the target network (in steps)
+target_update_frequency: 500   # How often to update the target network (in steps)
 
 # --- Epsilon-Greedy Exploration ---
 epsilon_start: 1.0              # Starting value of epsilon
@@ -38,7 +38,7 @@ epsilon_end: 0.01               # Minimum value of epsilon
 epsilon_decay_duration: 25000  # Number of steps over which to linearly decay epsilon
 
 # --- Saving and Visualization---
-save_frequency: 250000         # How often to save the model (in steps)
+save_frequency: 2000         # How often to save the model (in steps)
 save_path: "models/dqn_checkpoints/"  # Path to save the trained model
 video_folder_path: "videos/"  # Folder to save video captures
 capture_video: true            # Whether to capture video of the agent's performance

@@ -2,224 +2,149 @@
 
 import gymnasium as gym
 import torch
-import numpy as np
 import time
-import os
+import argparse  # Import the argument parsing library
+from pathlib import Path
+
+# Import our custom modules
+from common.wrappers import PreprocessAndStackFrames, RewardWrapper
+from common.utils import load_config
+from agents import create_agent  # Import our new factory function
 from torch.utils.tensorboard import SummaryWriter
 
-# import our custom modules
-from common.wrappers import PreprocessAndStackFrames, RewardWrapper
-from common.utils import load_config, generate_video
-from agents.dqn_agent import DQNAgent
-
-
-def main_temp():
-    print("--- Starting investigation of the 'info' dictionary ---")
-    
-    # Create the base environment
-    env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
-    
-    # We don't need our wrappers yet, as they might hide the info we want to see.
-    # We will interact with the raw environment directly.
-
-    env = RewardWrapper(
-        env,
-        enable_time_penalty=True,
-        time_penalty_per_step=-1,
-        enable_death_penalty=True,
-        death_penalty=-100.0,
-        enable_level_completion_bonus=True,
-        level_completion_bonus=5000.0
-    )
-
-    wrapped_env = PreprocessAndStackFrames(env)
-
-
-    obs, info = env.reset()
-    print(f"Info at reset: {info}")  
-
-    print("\n--- Stepping through the environment for 5 steps ---")
-    for i in range(5):
-        # Take a random action
-        action = env.action_space.sample()
-        obs, reward, terminated, truncated, info = env.step(action)
-        
-        # This is the crucial print statement
-        print(f"Step {i+1}: Reward={reward}, Info={info}")
-
-        if terminated or truncated:
-            print("Episode ended.")
-            break
-
-    env.close()
-    print("\n--- Investigation complete ---")
-
-def main():
+def train_agent(config: dict) -> None:
     """
-    Main function to set up the environment, agent, and start training.
-    
+    The main training loop, refactored to be generic.
+
     Parameters:
-    - None
+    - config (dict): Configuration dictionary containing all necessary parameters. 
 
     Returns:
     - None
     """
-    # --- 1. Load Configuration and Set Up ---
-    config_path = 'configs/dqn_config.yaml'
-    config = load_config(config_path)
-
-    # Create directories if they don't exist
-    save_path = config.get('save_path', 'models/dqn_checkpoints/')
-    os.makedirs(save_path, exist_ok=True)
-    video_path = config.get('video_folder_path', 'videos/')
-    os.makedirs(video_path, exist_ok=True)
-
-    # Set the device for PyTorch
-    device = torch.device(config['device'] if torch.cuda.is_available() else "cpu")
+    # --- 1. Set Up ---
+    run_name = f"{config['agent']}_{int(time.time())}"
+    log_path = config["log_path"] / run_name
+    writer = SummaryWriter(log_dir=str(log_path))
+    print(f"TensorBoard log directory: {log_path}")
+    
+    device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # --- Setup TensorBoard ---
-    # Create a unique run name based on timestamp and config
-    run_name = f"dqn_{config['total_timesteps']}_steps_{int(time.time())}"
-    # Create a SummaryWriter for TensorBoard logging
-    writer = SummaryWriter(log_dir=f"runs/{run_name}")
-
-    # --- 2. Create the Environment ---
-    # Create the base environment
+    # --- 2. Create and Wrap the Environment ---
     env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
-    env.metadata['render_fps'] = 60
-
-    # Apply reward shaping if enabled in config
+    
     if config.get('enable_reward_shaping', False):
-
-        print("--- Reward Shaping Enabled ---")
-        
-        # Get the reward parameters from config
-        enable_time = config.get('enable_time_penalty', False)
-        time_penalty = config.get('time_penalty_per_step', 0.0)
-        enable_death = config.get('enable_death_penalty', False)
-        death_penalty = config.get('death_penalty', 0.0)
-        enable_level_completion = config.get('enable_level_completion_bonus', False)
-        level_completion_bonus = config.get('level_completion_bonus', 0.0)
-
-        # Print the settings that will be used
-        if enable_time:
-            print(f"Time Penalty per Step: {time_penalty}")
-        if enable_death:
-            print(f"Death Penalty: {death_penalty}")
-
+        print("Reward Shaping Enabled.")
         env = RewardWrapper(
             env,
-            enable_time_penalty=enable_time,
-            time_penalty_per_step=time_penalty,
-            enable_death_penalty=enable_death,
-            death_penalty=death_penalty,
-            enable_level_completion_bonus=enable_level_completion,
-            level_completion_bonus=level_completion_bonus,
+            enable_level_completion_bonus=config.get('enable_level_completion_bonus', False),
+            level_completion_bonus=config.get('level_completion_bonus', 0.0),
+            enable_death_penalty=config.get('enable_death_penalty', False),
+            death_penalty=config.get('death_penalty', 0.0)
         )
-        print("------------------------------")
 
-    # Wrap it with our custom preprocessing and frame stacking wrapper
     wrapped_env = PreprocessAndStackFrames(env, num_stack=4, shape=(84, 84))
-    
     print("Environment created and wrapped.")
 
-    # --- 3. Instantiate the DQN Agent ---
-    # Get environment parameters
+    # --- 3. Instantiate the Agent using the Factory ---
     input_shape = wrapped_env.observation_space.shape
     num_actions = wrapped_env.action_space.n
-
-    # Create the agent
-    agent = DQNAgent(
+    
+    agent = create_agent(
+        agent_name=config['agent'],
+        config=config,
         input_shape=input_shape,
         num_actions=num_actions,
-        replay_buffer_capacity=config['replay_buffer_capacity'],
-        batch_size=config['batch_size'],
-        learning_rate=config['learning_rate'],
-        gamma=config['gamma'],
         device=device
     )
+    print(f"{config['agent'].upper()} Agent instantiated.")
 
-    print("DQN Agent instantiated.")
-    print("--- Setup Complete. Starting Training... ---")
-
-    # --- 4. The Main Training Loop (to be implemented next) ---
+    # --- 4. Main Training Loop ---
+    # (This is the same loop you wrote, just adapted slightly to be generic)
     state, info = wrapped_env.reset()
-    ####---- Debug ----####
-    print(f"Info at reset:\n{info}")
     episode_reward = 0
     episode_length = 0
     episode_true_score = 0
 
-    for timestep in range(config['total_timesteps']):
-        if timestep < config['epsilon_decay_duration']:
-            # Linearly decay epsilon
-            epsilon = config['epsilon_start'] - (config['epsilon_start'] - config['epsilon_end']) * (timestep / config['epsilon_decay_duration'])
-        else:
-            # After decay duration, use final epsilon
-            epsilon = config['epsilon_end']
-
-        action = agent.act(state, epsilon)
-
-        # Take the action in the environment
+    print("--- Starting Training ---")
+    for timestep in range(1, config['total_timesteps'] + 1):
+        # The agent's act method will handle exploration (e.g., epsilon)
+        action = agent.act(state) 
         next_state, reward, terminated, truncated, info = wrapped_env.step(action)
-        episode_reward += reward
-        episode_length += 1
-        episode_true_score += info.get('original_reward', 0)
         done = terminated or truncated
 
-        # Store the transition in the replay buffer
-        agent.replay_buffer.add(state, action, reward, next_state, done)
+        agent.step(state, action, reward, next_state, done)
 
-        # Update the current state
         state = next_state
+        
+        episode_reward += reward
+        episode_length += 1
+        episode_true_score += info.get('original_reward', reward) 
 
-        # If episode is done, reset the environment
+        # Let the agent handle its own experience storage and learning logic
+        #agent.step(state, action, reward, next_state, done)
+        
+        #state = next_state
+
         if done:
-            # Log episode metrics to TensorBoard
-            print(f"Timestep: {timestep}, Episode Reward: {episode_reward}, True Score: {episode_true_score}, Episode Length: {episode_length}")
+            print(f"T: {timestep}, Ep. Reward: {episode_reward:.2f}, True Score: {episode_true_score}, Ep. Length: {episode_length}")
             writer.add_scalar("charts/episode_reward", episode_reward, global_step=timestep)
             writer.add_scalar("charts/episode_true_score", episode_true_score, global_step=timestep)
             writer.add_scalar("charts/episode_length", episode_length, global_step=timestep)
-
-            # Reset for the next episode
+            
+            state, info = wrapped_env.reset()
             episode_reward = 0
             episode_length = 0
             episode_true_score = 0
-            state, info = wrapped_env.reset()
 
-        # Check if we can learn
         if timestep > config['learning_starts'] and timestep % config['train_frequency'] == 0:
             loss = agent.learn()
-            # Log the training metrics
-            if timestep % 100 == 0:
+            if loss is not None:
                 writer.add_scalar("losses/td_loss", loss, global_step=timestep)
-                writer.add_scalar("charts/epsilon", epsilon, global_step=timestep)
-
-            
+        
         if timestep > config['learning_starts'] and timestep % config['target_update_frequency'] == 0:
             agent.update_target_network()
-
-        # Saving, Logging and Visualization
-        if (timestep + 1) % 1000 == 0:
-            print(f"Timestep: {timestep + 1}/{config['total_timesteps']}")
-
-        if (timestep + 1) % config['save_frequency'] == 0:
-            checkpoint_path = f"{config['save_path']}dqn_model_step_{timestep + 1}.pth"
+            
+        # Logging and Saving (agent-specific logs are handled inside the agent)
+        if timestep % config.get('log_frequency', 1000) == 0:
+            agent.log_metrics(writer, timestep)
+        
+        if timestep % config['save_frequency'] == 0:
+            checkpoint_path = config["save_path"] / f"{config['agent']}_model_step_{timestep}.pth"
             agent.save(checkpoint_path)
 
-        if config.get('capture_video', False) and (timestep + 1) in config.get('video_capture_steps', []):
-
-            generate_video(
-                agent=agent, 
-                config=config, 
-                timestep=(timestep + 1),
-            )
-
-    # --- 5. Clean up ---
+    # --- 5. Final Cleanup ---
     wrapped_env.close()
-    print("--- Training Complete. ---")
+    writer.close()
+    print("--- Training Complete ---")
 
+def main():
+    """
+    Loads config from a command-line argument and starts the training process.
+    """
+    # --- Set up Argument Parser ---
+    parser = argparse.ArgumentParser(description="Train a Reinforcement Learning agent for Ms. Pac-Man.")
+    parser.add_argument("--agent", type=str, required=True, help="The name of the agent to train (e.g., 'dqn').")
+    parser.add_argument("--config", type=str, required=True, help="Path to the configuration YAML file.")
+    args = parser.parse_args()
+
+    # --- Load Configuration ---
+    config = load_config(args.config)
+    # Add the agent name from the command line to the config for easy access
+    config['agent'] = args.agent
+
+    # --- Set up Paths ---
+    PROJECT_ROOT = Path.cwd()
+    config["save_path"] = PROJECT_ROOT / config.get('save_path', f"models/{args.agent}_checkpoints/")
+    config["log_path"] = PROJECT_ROOT / config.get('log_path', 'runs/')
+    
+    # Create directories if they don't exist
+    config["save_path"].mkdir(parents=True, exist_ok=True)
+    config["log_path"].mkdir(parents=True, exist_ok=True)
+    
+    # --- Start Training ---
+    train_agent(config)
 
 if __name__ == "__main__":
     main()

@@ -8,88 +8,14 @@ import numpy as np
 
 # import components we built
 from common.replay_buffer import ReplayBuffer, Experience
-
-class QNetwork(nn.Module):
-    """
-    The Q-Network for the DQN agent. This is a simple convolutional neural network
-    that takes stacked frames as input and outputs Q-values for each action.
-    """
-
-    def __init__(self, input_shape: tuple, num_actions: int) -> None:
-        """
-        Initialize the Q-Network.
-        
-        Parameters:
-        - input_shape (tuple): The shape of the input frames (num_stack, height, width).
-        - num_actions (int): The number of actions the agent can take.
-        
-        Returns:
-        - None
-        """
-
-        super(QNetwork, self).__init__()
-        input_channels = input_shape[0]  # Number of stacked frames
-        self.conv = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=8, stride=4),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU(),
-        )
-
-        # Calculate the output size of the convolutional layers
-        conv_out_size = self._get_conv_out_size(input_shape)
-
-        self.fc = nn.Sequential(
-            nn.Linear(conv_out_size, 512),
-            nn.ReLU(),
-            nn.Linear(512, num_actions)
-        )
-
-    def _get_conv_out_size(self, input_shape: tuple) -> int:
-        """
-        Calculate the output size of the convolutional layers given the input shape.
-        
-        Parameters:
-        - input_shape (tuple): The shape of the input frames (num_stack, height, width).
-        
-        Returns:
-        - int: The size of the output from the convolutional layers.
-        """
-
-        conv_out = self.conv(torch.zeros(1, *input_shape))
-        
-        return int(torch.prod(torch.tensor(conv_out.size())))
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass through the network.
-        
-        Parameters:
-        - x (torch.Tensor): The input tensor containing stacked frames.
-        
-        Returns:
-        - torch.Tensor: The Q-values for each action.
-        """
-        
-        conv_out = self.conv(x)
-
-        # Flatten the output from the convolutional layers
-        conv_out = conv_out.view(x.size(0), -1)
-
-        # Pass through the fully connected layers
-        q_values = self.fc(conv_out)
-
-        return q_values
+from .q_network import QNetwork
     
 class DQNAgent:
     """
     The DQN agent that interacts with the environment and learns from experiences.
     """
 
-    def __init__(self, input_shape: tuple, num_actions: int, replay_buffer_capacity: int, 
-                 batch_size: int, learning_rate: float, gamma: float, device: torch.device) -> None:
+    def __init__(self, config: dict, input_shape: tuple, num_actions: int, device: torch.device) -> None:
         """
         Initialize the DQN agent.
 
@@ -107,11 +33,14 @@ class DQNAgent:
         """
 
         # Initialize parameters
+        self.config = config
         self.input_shape = input_shape
         self.num_actions = num_actions
-        self.batch_size = batch_size
-        self.gamma = gamma
         self.device = device
+        self.batch_size = config['batch_size']
+        self.gamma = config['gamma']
+        self.learning_rate = config['learning_rate']
+        self.timestep = 0  # Track the number of timesteps
 
         # Create the two Q-networks: Policy and Target
         self.q_policy_net = QNetwork(input_shape, num_actions).to(device)
@@ -122,22 +51,27 @@ class DQNAgent:
         self.q_target_net.eval()  # Set target network to evaluation mode
 
         # Create the optimizer
-        self.optimizer = optim.Adam(self.q_policy_net.parameters(), lr=learning_rate)
+        self.optimizer = optim.Adam(self.q_policy_net.parameters(), lr=self.learning_rate)
 
         # Create the replay buffer
-        self.replay_buffer = ReplayBuffer(replay_buffer_capacity, batch_size=batch_size)
+        self.replay_buffer = ReplayBuffer(capacity=config['replay_buffer_capacity'], 
+                                          batch_size=self.batch_size)
 
-    def act(self, state: torch.Tensor, epsilon: float) -> int:
+    def act(self, state: torch.Tensor) -> int:
         """
         Select an action based on the current state and epsilon-greedy policy.
 
         Parameters:
         - state (torch.Tensor): The current state of the environment.
-        - epsilon (float): The probability of selecting a random action.
 
         Returns:
         - int: The selected action.
         """
+
+        self.timestep += 1
+        epsilon = np.interp(self.timestep,
+                            [0, self.config['epsilon_decay_duration']],
+                            [self.config['epsilon_start'], self.config['epsilon_end']])
 
         # Decide whether to explore or exploit
         if random.random() < epsilon: # Exploration
@@ -235,3 +169,39 @@ class DQNAgent:
         action = q_values.max(1)[1].item()
 
         return action
+    
+    def step(self, state: np.ndarray, action: int, reward: float, 
+             next_state: np.ndarray, done: bool) -> None:
+        """
+        Store the experience in the replay buffer.
+
+        Parameters:
+        - state (np.ndarray): The current state of the environment.
+        - action (int): The action taken.
+        - reward (float): The reward received.
+        - next_state (np.ndarray): The next state of the environment.
+        - done (bool): Whether the episode has ended.
+
+        Returns:
+        - None
+        """
+
+        # Store transition in the replay buffer
+        self.replay_buffer.add(state, action, reward, next_state, done)
+
+    def log_metrics(self, writer: 'SummaryWriter', global_step: int) -> None:
+        """
+        Log metrics to TensorBoard.
+
+        Parameters:
+        - writer: The TensorBoard writer instance.
+        - global_step (int): The current training timestep.
+
+        Returns:
+        - None
+        """
+
+        epsilon = np.interp(global_step,
+                            [0, self.config['epsilon_decay_duration']],
+                            [self.config['epsilon_start'], self.config['epsilon_end']])
+        writer.add_scalar("charts/epsilon", epsilon, global_step=global_step)

@@ -169,7 +169,7 @@ class PPOAgent:
         # --- 2. Flatten the rollout data for easier processing ---
         # We convert the rollout data (num_steps, ...) into a single flat batch
         # Normalizing the states tensor here
-        b_states = self.states.view(-1, *self.states.shape[2:]).float() / 255.0
+        b_states = self.states.float() / 255.0
         b_actions = self.actions.view(-1)
         b_log_probs = self.log_probs.view(-1)
         b_advantages = advantages.view(-1)
@@ -178,15 +178,19 @@ class PPOAgent:
 
         # --- 3. The PPO Update Loop ---
         # Get the indices for the entire batch
-        batch_indices = np.arange(self.num_steps)
+        batch_size = self.num_steps
+
+        mini_batch_size = batch_size // self.num_mini_batches
+
+        batch_indices = np.arange(batch_size)
         
         for epoch in range(self.num_epochs):
             # Shuffle the indices at the start of each epoch
             np.random.shuffle(batch_indices)
             
             # Loop over the data in mini-batches
-            for start in range(0, self.num_steps, self.num_mini_batches):
-                end = start + self.num_mini_batches
+            for start in range(0, batch_size, mini_batch_size):
+                end = start + mini_batch_size
                 mini_batch_indices = batch_indices[start:end]
 
                 # --- Get the data for the current mini-batch ---

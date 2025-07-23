@@ -6,6 +6,7 @@ import time
 import argparse  # Import the argument parsing library
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
+import gc
 
 # Import our custom modules
 from common.wrappers import PreprocessAndStackFrames, RewardWrapper
@@ -44,23 +45,29 @@ def train_agent(config: dict) -> None:
 
     print("--- Starting Training ---")
     for timestep in range(1, config['total_timesteps'] + 1):
-        # The agent's act method will handle exploration (e.g., epsilon)
-        action = agent.act(state) 
-        next_state, reward, terminated, truncated, info = wrapped_env.step(action)
-        done = terminated or truncated
 
-        agent.step(state, action, reward, next_state, done)
+        # # Agent Specific Actions and Data Collection
+        # --- DQN ---
+        if config['agent'].lower() == 'dqn':
+            action = agent.act(state)
+            next_state, reward, terminated, truncated, info = wrapped_env.step(action)
+            done = terminated or truncated
+            agent.step(state, action, reward, next_state, done)
 
+        # --- PPO ---
+        elif config['agent'].lower() == 'ppo':
+            action, log_prob, value = agent.act(state)
+            next_state, reward, terminated, truncated, info = wrapped_env.step(action)
+            done = terminated or truncated
+            agent.step(state, action, reward, done, log_prob, value)
+
+
+        # Common Logic for State Update and Episode Management
         state = next_state
         
         episode_reward += reward
         episode_length += 1
         episode_true_score += info.get('original_reward', reward) 
-
-        # Let the agent handle its own experience storage and learning logic
-        #agent.step(state, action, reward, next_state, done)
-        
-        #state = next_state
 
         if done:
             print(f"T: {timestep}, Ep. Reward: {episode_reward:.2f}, True Score: {episode_true_score}, Ep. Length: {episode_length}")
@@ -73,14 +80,22 @@ def train_agent(config: dict) -> None:
             episode_length = 0
             episode_true_score = 0
 
-        if timestep > config['learning_starts'] and timestep % config['train_frequency'] == 0:
-            loss = agent.learn()
-            if loss is not None:
-                writer.add_scalar("losses/td_loss", loss, global_step=timestep)
+        # Agent-Specific Learning
+        # --- DQN ---
+        if config['agent'].lower() == 'dqn':
+            if timestep > config['learning_starts'] and timestep % config['train_frequency'] == 0:
+                loss = agent.learn()
+                if loss is not None:
+                    writer.add_scalar("losses/td_loss", loss, global_step=timestep)
         
-        if timestep > config['learning_starts'] and timestep % config['target_update_frequency'] == 0:
-            agent.update_target_network()
-            
+            if timestep > config['learning_starts'] and timestep % config['target_update_frequency'] == 0:
+                agent.update_target_network()
+        
+        # --- PPO ---
+        elif config['agent'].lower() == 'ppo':
+            if agent.rollout_step_counter == config['num_steps']:
+                agent.learn(next_state, done)
+                
         # Logging and Saving (agent-specific logs are handled inside the agent)
         if timestep % config.get('log_frequency', 1000) == 0:
             agent.log_metrics(writer, timestep)
@@ -88,6 +103,14 @@ def train_agent(config: dict) -> None:
         if timestep % config['save_frequency'] == 0:
             checkpoint_path = config["save_path"] / f"{config['agent']}_model_step_{timestep}.pth"
             agent.save(checkpoint_path)
+
+        # Garbage collection to free up memory
+        if timestep % 1000 == 0:
+            gc.collect()
+            if device.type == 'cuda':
+                # Clear CUDA cache if using GPU
+                torch.cuda.empty_cache()
+            print(f"--- Garbage collection at timestep {timestep} ---")
 
     # --- 5. Final Cleanup ---
     wrapped_env.close()

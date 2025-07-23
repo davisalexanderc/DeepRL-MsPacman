@@ -2,7 +2,7 @@
 
 import torch
 from .dqn_agent import DQNAgent
-# from .ppo_agent import PPOAgent  # Uncomment if you have a PPO agent
+from .ppo_agent import PPOAgent
 
 def create_agent(agent_name: str, config: dict, input_shape: tuple, 
                  num_actions: int, device: torch.device):
@@ -30,7 +30,11 @@ def create_agent(agent_name: str, config: dict, input_shape: tuple,
             device=device,
         )
     elif agent_name == 'ppo':
-        # return PPOAgent(config=config, input_shape=input_shape, num_actions=num_actions, device=device)
-        raise NotImplementedError("PPO Agent is not implemented yet.")
+        return PPOAgent(
+            config=config,
+            input_shape=input_shape,
+            num_actions=num_actions,
+            device=device,
+        )
     else:
         raise ValueError(f"Unknown agent name: {agent_name}. Supported agents: 'dqn', 'ppo'.")

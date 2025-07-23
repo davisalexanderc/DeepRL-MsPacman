@@ -33,18 +33,18 @@ class ActorCriticNetwork(nn.Module):
         )
 
         # Calculate the output size after the convolutional layers
-        conv_output_shape = self._get_conv_output_shape(input_shape)
+        conv_out_size = self._get_conv_out_size(input_shape)
 
         # Actor Head
         self.actor_head = nn.Sequential(
-            nn.Linear(conv_output_shape, 512),
+            nn.Linear(conv_out_size, 512),
             nn.ReLU(),
             nn.Linear(512, num_actions)
         )
 
         # Critic Head
         self.critic_head = nn.Sequential(
-            nn.Linear(conv_output_shape, 512),
+            nn.Linear(conv_out_size, 512),
             nn.ReLU(),
             nn.Linear(512, 1)
         )

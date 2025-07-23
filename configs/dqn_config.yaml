@@ -1,7 +1,7 @@
 # configs/dqn_config.yaml
 
 # --- Experiment ---
-total_timesteps: 5000    # Total number of steps to train for (Change to 1_000_000 for full training)
+total_timesteps: 50000    # Total number of steps to train for (Change to 1_000_000 for full training)
 device: "cuda"            # "cuda" or "cpu"
 
 # --- Agent/Network ---
@@ -37,9 +37,13 @@ epsilon_start: 1.0              # Starting value of epsilon
 epsilon_end: 0.01               # Minimum value of epsilon
 epsilon_decay_duration: 25000  # Number of steps over which to linearly decay epsilon
 
-# --- Saving and Visualization---
-save_frequency: 2000         # How often to save the model (in steps)
+# --- Saving and Logging ---
+save_frequency: 10000         # How often to save the model (in steps)
 save_path: "models/dqn_checkpoints/"  # Path to save the trained model
+log_path: "logs/"  # Path to save training logs
+log_frequency: 1000  # How often to log training metrics (in steps)
+
+# --- Game Play Videos ---
 video_folder_path: "videos/"  # Folder to save video captures
 capture_video: true            # Whether to capture video of the agent's performance
-video_capture_steps: [50000, 100000, 500000, 1000000, 2000000, 5000000, 10000000]  # Steps at which to capture video
+video_capture_steps: [5e5, 1e5, 5e5, 1e6, 2e6, 5e6, 1e7]  # Steps at which to capture video

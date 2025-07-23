@@ -46,4 +46,4 @@ log_frequency: 1000  # How often to log training metrics (in steps)
 # --- Game Play Videos ---
 video_folder_path: "videos/"  # Folder to save video captures
 capture_video: true            # Whether to capture video of the agent's performance
-video_capture_steps: [5e5, 1e5, 5e5, 1e6, 2e6, 5e6, 1e7]  # Steps at which to capture video
+video_capture_steps: [50000, 100000, 500000, 1000000, 2000000, 5000000, 10000000]  # Steps at which to capture video

@@ -34,18 +34,20 @@ def play_one_game(agent, env):
     terminated = False
     truncated = False
     current_game_score = 0
+    current_level = info.get('current_level', 0)
 
     while not (terminated or truncated):
         action = agent.get_greedy_action(state)
         next_state, reward, terminated, truncated, info = env.step(action)
         current_game_score += reward
+        current_level = info.get('current_level', current_level)
 
         state = next_state
         metrics['steps'] += 1
 
     # Collecting game statistics
     metrics['score'] = current_game_score
-    metrics['max_level'] = env.unwrapped.ale.getRAM()[1]  # Get current level from RAM
+    metrics['max_level'] = current_level # The maximum level is the last level reached
     metrics['level_1_completed'] = metrics['max_level'] >= 1
 
     return metrics

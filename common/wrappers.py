@@ -154,6 +154,26 @@ class RewardWrapper(gym.Wrapper):
         self.current_lives = 0
         self.current_level = 0
 
+        # Initialize pellet counter for level completion
+        self.pellet_eaten_counter = 0
+        self.power_pellet_eaten_counter = 0
+        self.pellets_per_level = {
+            0: 220,  # Level 1
+            1: 220,  # Level 2
+            2: 240,  # Level 3
+            3: 240,  # Level 4
+            4: 240,  # Level 5
+            5: 238,  # Level 6
+            6: 238,  # Level 7
+            7: 238,  # Level 8
+            8: 238,  # Level 9
+            9: 234,  # Level 10
+            10: 234, # Level 11
+            11: 234, # Level 12
+            12: 234, # Level 13
+        }
+        self.power_pellets_per_level = 4
+
     def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
         """
         Take a step in the environment and modify the reward.
@@ -173,6 +193,26 @@ class RewardWrapper(gym.Wrapper):
         # Store original score for logging purposes
         info['original_reward'] = original_reward
 
+        # Check if a pellet or power pellet was eaten
+        if original_reward == 10:  # Pellet eaten
+            self.pellet_eaten_counter += 1
+        elif original_reward == 50:  # Power pellet eaten
+            self.power_pellet_eaten_counter += 1
+
+        # Check for level completion
+        level_cleared = False
+        required_pellets = self.pellets_per_level.get(self.current_level, 0)
+        required_power_pellets = self.power_pellets_per_level
+
+        if (self.pellet_eaten_counter >= required_pellets and
+            self.power_pellet_eaten_counter >= required_power_pellets): # All pellets and power pellets eaten
+            level_cleared = True
+            self.pellet_eaten_counter = 0
+            self.power_pellet_eaten_counter = 0
+            self.current_level += 1
+
+            print(f"[RewardWrapper] Level cleared! Current Level: {self.current_level}")
+
         # Initialize modified reward
         modified_reward = original_reward
 
@@ -191,13 +231,12 @@ class RewardWrapper(gym.Wrapper):
                 self.current_lives = new_lives
 
         # Apply level completion bonus if enabled and the level is completed
-        if self.enable_level_completion_bonus:
-            new_level = self.env.unwrapped.ale.getRAM()[1]  # Get current level from RAM
-            if new_level > self.current_level:
-                modified_reward += self.level_completion_bonus
-                print(f"[RewardWrapper] Level completed! Previous Level: {self.current_level}, New Level: {new_level}")
-                print(f"[RewardWrapper] Adding Bonus: {self.level_completion_bonus}")
-                self.current_level = new_level
+        if self.enable_level_completion_bonus and level_cleared:
+            modified_reward += self.level_completion_bonus
+            print(f"[RewardWrapper] Adding Bonus: {self.level_completion_bonus}")
+
+        # Update current level in info
+        info['current_level'] = self.current_level
 
         return obs, modified_reward, terminated, truncated, info
     
@@ -218,10 +257,13 @@ class RewardWrapper(gym.Wrapper):
 
         # Reset current lives
         self.current_lives = info.get('ale.lives', 0)
-        self.current_level = self.env.unwrapped.ale.getRAM()[1] # Get current level from RAM
+        self.pellet_eaten_counter = 0
+        self.power_pellet_eaten_counter = 0
+        self.current_level = 0
 
         ###--- Debug ---###
         #print(f"[RewardWrapper] Episode reset. Starting at Level: {self.current_level}")
+        info['current_level'] = self.current_level
 
         return obs, info
     

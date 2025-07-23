@@ -33,6 +33,8 @@ def main():
     
     # Crucially, ensure reward shaping is OFF for evaluation
     config['enable_reward_shaping'] = False
+    config['level_completion_bonus'] = 0.0
+    config['death_penalty'] = 0.0
     
     # --- 3. Call the evaluation function ---
     try:

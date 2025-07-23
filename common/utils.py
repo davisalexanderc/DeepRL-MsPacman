@@ -102,3 +102,15 @@ def setup_environment_and_agent(config: dict) -> tuple:
     print(f"{config['agent'].upper()} Agent instantiated.")
     
     return wrapped_env, agent, device
+
+def get_level(env: gym.Env) -> int:
+    """
+    Get the current level from the environment's RAM.
+
+    Parameters:
+    - env (gym.Env): The environment to get the level from.
+
+    Returns:
+    - int: The current level.
+    """
+    return env.unwrapped.ale.getRAM()[83]  # MsPacman level is stored at index 83 in RAM

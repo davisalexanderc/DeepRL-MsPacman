@@ -32,4 +32,3 @@ setuptools==68.2.2
 shimmy==0.2.1
 autorom==0.4.2
 AutoROM.accept-rom-license==0.6.1
-gc

@@ -222,13 +222,15 @@ class RewardWrapper(gym.Wrapper):
 
         # Apply death penalty if enabled and a life was lost
         if self.enable_death_penalty:
-            new_lives = info.get('ale.lives', 0)
+            new_lives = info.get('lives', self.current_lives)
             # Compares current lives to new lives, this accounts for life gain and loss
-            if new_lives > self.current_lives:
-                self.current_lives = new_lives
-            elif new_lives < self.current_lives:
+            #if new_lives > self.current_lives:
+            #    self.current_lives = new_lives
+            if new_lives < self.current_lives:
                 modified_reward += self.death_penalty
-                self.current_lives = new_lives
+                #print(f"--- LIFE LOST! Applying {self.death_penalty} penalty. Lives remaining: {new_lives} ---")
+            
+            self.current_lives = new_lives # Handles life gain and loss
 
         # Apply level completion bonus if enabled and the level is completed
         if self.enable_level_completion_bonus and level_cleared:
@@ -256,7 +258,7 @@ class RewardWrapper(gym.Wrapper):
         obs, info = self.env.reset(**kwargs)
 
         # Reset current lives
-        self.current_lives = info.get('ale.lives', 0)
+        self.current_lives = info.get('lives', self.current_lives)
         self.pellet_eaten_counter = 0
         self.power_pellet_eaten_counter = 0
         self.current_level = 0

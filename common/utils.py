@@ -77,17 +77,23 @@ def setup_environment_and_agent(config: dict) -> tuple:
     
     env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
     
+    env = PreprocessAndStackFrames(env, num_stack=4, shape=(84, 84))
+
     if config.get('enable_reward_shaping', False):
         print("Reward Shaping Enabled.")
-        env = RewardWrapper(
+        wrapped_env = RewardWrapper(
             env,
             enable_level_completion_bonus=config.get('enable_level_completion_bonus', False),
             level_completion_bonus=config.get('level_completion_bonus', 0.0),
             enable_death_penalty=config.get('enable_death_penalty', False),
-            death_penalty=config.get('death_penalty', 0.0)
+            death_penalty=config.get('death_penalty', 0.0),
+            enable_time_penalty=config.get('enable_time_penalty', False),
+            time_penalty_per_step=config.get('time_penalty_per_step', 0.0)
         )
+    else:
+        print("Reward Shaping Disabled.")
+        wrapped_env = env
 
-    wrapped_env = PreprocessAndStackFrames(env, num_stack=4, shape=(84, 84))
 
     input_shape = wrapped_env.observation_space.shape
     num_actions = wrapped_env.action_space.n
@@ -102,15 +108,3 @@ def setup_environment_and_agent(config: dict) -> tuple:
     print(f"{config['agent'].upper()} Agent instantiated.")
     
     return wrapped_env, agent, device
-
-def get_level(env: gym.Env) -> int:
-    """
-    Get the current level from the environment's RAM.
-
-    Parameters:
-    - env (gym.Env): The environment to get the level from.
-
-    Returns:
-    - int: The current level.
-    """
-    return env.unwrapped.ale.getRAM()[83]  # MsPacman level is stored at index 83 in RAM

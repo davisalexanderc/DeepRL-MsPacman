@@ -215,7 +215,7 @@ class RewardWrapper(gym.Wrapper):
             print(f"[RewardWrapper] Level cleared! Current Level: {self.current_level}")
 
         # Initialize modified reward
-        modified_reward = original_reward
+        modified_reward = float(original_reward)
 
         # Apply time penalty if enabled
         if self.enable_time_penalty:

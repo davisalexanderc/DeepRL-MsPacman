@@ -70,7 +70,7 @@ def train_agent(config: dict) -> None:
         episode_true_score += info.get('original_reward', reward) 
 
         if done:
-            print(f"T: {timestep}, Ep. Reward: {episode_reward:.2f}, True Score: {episode_true_score}, Ep. Length: {episode_length}")
+            print(f"Timestep: {timestep}, Ep. Reward: {episode_reward:.2f}, True Score: {episode_true_score}, Ep. Length: {episode_length}")
             writer.add_scalar("charts/episode_reward", episode_reward, global_step=timestep)
             writer.add_scalar("charts/episode_true_score", episode_true_score, global_step=timestep)
             writer.add_scalar("charts/episode_length", episode_length, global_step=timestep)
@@ -110,7 +110,7 @@ def train_agent(config: dict) -> None:
             if device.type == 'cuda':
                 # Clear CUDA cache if using GPU
                 torch.cuda.empty_cache()
-            print(f"--- Garbage collection at timestep {timestep} ---")
+            #print(f"--- Garbage collection at timestep {timestep} ---")
 
     # --- 5. Final Cleanup ---
     wrapped_env.close()

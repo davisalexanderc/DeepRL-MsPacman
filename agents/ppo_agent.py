@@ -245,7 +245,7 @@ class PPOAgent:
         - None
         """
         torch.save(self.network.state_dict(), path)
-        print(f"\nModel saved to {path}")
+        #print(f"\nModel saved to {path}")
 
     def load(self, path: str) -> None:
         """

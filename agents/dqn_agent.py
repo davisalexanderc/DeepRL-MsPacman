@@ -148,7 +148,7 @@ class DQNAgent:
         - None
         """
         torch.save(self.q_policy_net.state_dict(), path)
-        print(f"\nModel saved to {path}")
+        #print(f"\nModel saved to {path}")
 
     def get_greedy_action(self, state: np.ndarray) -> int:
         """

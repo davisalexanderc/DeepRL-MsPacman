@@ -191,6 +191,7 @@ class RewardWrapper(gym.Wrapper):
 
         obs, original_reward, terminated, truncated, info = self.env.step(action)
         # Store original score for logging purposes
+        info = info.copy() # Prevents a memory leak by copying the info dict
         info['original_reward'] = original_reward
 
         # Check if a pellet or power pellet was eaten
@@ -256,6 +257,8 @@ class RewardWrapper(gym.Wrapper):
 
         # Reset the environment
         obs, info = self.env.reset(**kwargs)
+
+        info = info.copy() # Prevents a memory leak by copying the info dict
 
         # Reset current lives
         self.current_lives = info.get('lives', self.current_lives)

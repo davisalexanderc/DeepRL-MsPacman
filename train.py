@@ -110,7 +110,7 @@ def train_agent(config: dict) -> None:
             if device.type == 'cuda':
                 # Clear CUDA cache if using GPU
                 torch.cuda.empty_cache()
-            #print(f"--- Garbage collection at timestep {timestep} ---")
+            print(f"--- Garbage collection at timestep {timestep} ---")
 
     # --- 5. Final Cleanup ---
     wrapped_env.close()

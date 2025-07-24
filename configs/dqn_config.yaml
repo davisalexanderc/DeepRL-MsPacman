@@ -17,8 +17,8 @@ frame_width: 84
 # --- Reward Shaping ---
 enable_reward_shaping: true  # Whether to use reward shaping
 enable_time_penalty: true  # Whether to apply a time penalty
-time_penalty_per_step: -1  # Penalty to apply for each step taken
-enable_death_penalty: true  # Whether to apply a death penalty
+time_penalty_per_step: -10  # Penalty to apply for each step taken
+enable_death_penalty: false  # Whether to apply a death penalty
 death_penalty: -100.0         # Penalty to apply when the agent loses a life
 enable_level_completion_bonus: true  # Whether to apply a bonus for completing the level
 level_completion_bonus: 5000.0  # Bonus to apply when the agent completes the level

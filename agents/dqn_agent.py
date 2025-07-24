@@ -122,12 +122,13 @@ class DQNAgent:
         loss.backward() # Backpropagate the loss
         self.optimizer.step() # Update the policy network weights
 
-        loss_value = loss.item()
+        loss_values = loss.items()
 
+        # Free up memory to stop memory leaks
         del states_tensor, actions_tensor, rewards_tensor, next_states_tensor, dones_tensor
         del all_q_values, predicted_q_values, next_state_q_values, target_q_values, loss
-    
-        return loss_value
+
+        return loss_values
 
     def update_target_network(self) -> None:
         """

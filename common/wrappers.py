@@ -269,4 +269,83 @@ class RewardWrapper(gym.Wrapper):
 
         return obs, info
     
+# In common/wrappers.py
+# You can add this class and eventually delete the other two.
+
+class AtariWrapper(gym.Wrapper):
+    """ A unified wrapper for preprocessing, frame stacking, and reward shaping. """
+    def __init__(self, env: gym.Env, config: dict):
+        super().__init__(env)
+        
+        # --- Preprocessing Attributes ---
+        self.shape = (config.get('frame_height', 84), config.get('frame_width', 84))
+        self.num_stack = config.get('frame_stack', 4)
+        self.frames = deque(maxlen=self.num_stack)
+        obs_shape = (self.num_stack, *self.shape)
+        self.observation_space = gym.spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
+
+        # --- Reward Shaping Attributes ---
+        self.enable_reward_shaping = config.get('enable_reward_shaping', False)
+        if self.enable_reward_shaping:
+            self.time_penalty = config.get('time_penalty_per_step', 0.0)
+            self.death_penalty = config.get('death_penalty', 0.0)
+            self.level_bonus = config.get('level_completion_bonus', 0.0)
+            
+            # Pellet counting state
+            self.current_lives = 0
+            self.current_level = 0
+            self.pellet_count = 0
+            self.power_pellet_count = 0
+            self.pellets_per_level = { 0: 220, 1: 220, 2: 240, 3: 240, 4: 240, 5: 238, 6: 238, 7: 238, 8: 238, 9: 234, 10: 234, 11: 234, 12: 234 }
+            self.power_pellets_per_level = 4
+
+    def reset(self, **kwargs):
+        obs, info = self.env.reset(**kwargs)
+        if self.enable_reward_shaping:
+            self.current_lives = info.get('lives', 0)
+            self.current_level = 0
+            self.pellet_count = 0
+            self.power_pellet_count = 0
+        
+        processed_obs = self._preprocess(obs)
+        for _ in range(self.num_stack):
+            self.frames.append(processed_obs)
+        return self._get_obs(), info
+
+    def step(self, action: int):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        
+        if self.enable_reward_shaping:
+            info = info.copy()
+            info['original_reward'] = reward
+            
+            # Apply penalties/bonuses
+            reward += self.time_penalty
+            if info.get('lives', self.current_lives) < self.current_lives:
+                reward += self.death_penalty
+            
+            # Pellet counting and level bonus
+            if info['original_reward'] == 10: self.pellet_count += 1
+            elif info['original_reward'] == 50: self.power_pellet_count += 1
+            
+            req_pellets = self.pellets_per_level.get(self.current_level, 234)
+            if self.pellet_count >= req_pellets and self.power_pellet_count >= self.power_pellets_per_level:
+                reward += self.level_bonus
+                self.current_level += 1
+                self.pellet_count = 0
+                self.power_pellet_count = 0
+
+            # Update state for next step
+            self.current_lives = info.get('lives', self.current_lives)
+            info['current_level'] = self.current_level
+        
+        # Preprocessing
+        self.frames.append(self._preprocess(obs))
+        return self._get_obs(), reward, terminated, truncated, info
+
+    def _preprocess(self, frame):
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+        return cv2.resize(frame_gray, (self.shape[1], self.shape[0]), interpolation=cv2.INTER_AREA)
     
+    def _get_obs(self):
+        return np.stack(self.frames, axis=0).astype(np.uint8)

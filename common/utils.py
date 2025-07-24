@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from gymnasium.wrappers import RecordVideo
 
-from common.wrappers import PreprocessAndStackFrames, RewardWrapper
+from common.wrappers import PreprocessAndStackFrames, RewardWrapper, AtariWrapper
 from agents import create_agent
 
 def load_config(config_path):
@@ -60,7 +60,7 @@ def generate_video(agent, config: dict, timestep: int) -> None:
     video_env.close()
     print(f"--- Video saved to {video_folder} ---")
 
-def setup_environment_and_agent(config: dict) -> tuple:
+def setup_environment_and_agent_old(config: dict) -> tuple:
     """
     Set up the environment and agent based on the provided configuration.
 
@@ -95,6 +95,44 @@ def setup_environment_and_agent(config: dict) -> tuple:
         wrapped_env = env
 
 
+    input_shape = wrapped_env.observation_space.shape
+    num_actions = wrapped_env.action_space.n
+    
+    agent = create_agent(
+        agent_name=config['agent'],
+        config=config,
+        input_shape=input_shape,
+        num_actions=num_actions,
+        device=device,
+    )
+    print(f"{config['agent'].upper()} Agent instantiated.")
+    
+    return wrapped_env, agent, device
+
+
+def setup_environment_and_agent(config: dict) -> tuple:
+    """
+    Set up the environment and agent based on the provided configuration.
+    This version uses a single, unified AtariWrapper.
+
+    Parameters:
+    - config (dict): Configuration dictionary.
+
+    Returns:
+    - tuple: (wrapped_env, agent, device)
+    """
+    device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
+    # 1. Create the base environment
+    env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
+    
+    # 2. Apply our single, unified wrapper
+    # All logic for preprocessing and reward shaping is now inside this one class.
+    wrapped_env = AtariWrapper(env, config)
+    print("Environment created and wrapped with unified AtariWrapper.")
+
+    # 3. Instantiate the Agent using the Factory
     input_shape = wrapped_env.observation_space.shape
     num_actions = wrapped_env.action_space.n
     

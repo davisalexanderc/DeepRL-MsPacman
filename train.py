@@ -90,8 +90,6 @@ def train_agent(config: dict) -> None:
         
             if timestep > config['learning_starts'] and timestep % config['target_update_frequency'] == 0:
                 agent.update_target_network()
-
-            if timestep % 250 ==0
         
         # --- PPO ---
         elif config['agent'].lower() == 'ppo':

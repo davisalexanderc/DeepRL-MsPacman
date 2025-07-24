@@ -90,6 +90,8 @@ def train_agent(config: dict) -> None:
         
             if timestep > config['learning_starts'] and timestep % config['target_update_frequency'] == 0:
                 agent.update_target_network()
+
+            if timestep % 250 ==0
         
         # --- PPO ---
         elif config['agent'].lower() == 'ppo':
@@ -105,7 +107,7 @@ def train_agent(config: dict) -> None:
             agent.save(checkpoint_path)
 
         # Garbage collection to free up memory
-        if timestep % 1000 == 0:
+        if timestep % 250 == 0:
             gc.collect()
             if device.type == 'cuda':
                 # Clear CUDA cache if using GPU

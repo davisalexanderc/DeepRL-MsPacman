@@ -124,18 +124,18 @@ def setup_environment_and_agent(config: dict) -> tuple:
     device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    # 1. Create the base environment
+    # Create the base environment
     env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
     
-    # 2. Apply our single, unified wrapper
-    # All logic for preprocessing and reward shaping is now inside this one class.
+    # Wrap the environment with the unified AtariWrapper
     wrapped_env = AtariWrapper(env, config)
     print("Environment created and wrapped with unified AtariWrapper.")
 
-    # 3. Instantiate the Agent using the Factory
+    # Get input shape and number of actions
     input_shape = wrapped_env.observation_space.shape
     num_actions = wrapped_env.action_space.n
     
+    # Instantiate the agent
     agent = create_agent(
         agent_name=config['agent'],
         config=config,

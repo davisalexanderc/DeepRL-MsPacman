@@ -26,6 +26,10 @@ imageio
 imageio[ffmpeg]
 moviepy
 pandas
+seaborn
+ipywidgets
+notebook
+jupyterlab
 
 # Additional Dependencies
 setuptools==68.2.2

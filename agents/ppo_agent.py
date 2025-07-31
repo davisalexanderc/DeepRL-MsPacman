@@ -256,7 +256,7 @@ class PPOAgent:
         """
         state_dict = torch.load(path, map_location=self.device)
         self.network.load_state_dict(state_dict)
-        print(f"\nModel loaded from {path}")
+        #print(f"\nModel loaded from {path}")
 
     from torch.utils.tensorboard import SummaryWriter
 

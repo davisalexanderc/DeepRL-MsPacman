@@ -225,4 +225,4 @@ class DQNAgent:
         state_dict = torch.load(path, map_location=self.device)
         self.q_policy_net.load_state_dict(state_dict)
         self.q_target_net.load_state_dict(state_dict)
-        print(f"\nModel loaded from {path}")
+        #print(f"\nModel loaded from {path}")

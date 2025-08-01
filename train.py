@@ -1,6 +1,21 @@
 # train.py
+"""
+Main training script for training a reinforcement learning agent to play Ms. Pac
 
-import gymnasium as gym
+This script serves as the main entry point for training different types of agents (e.g., DQN, PPO). It
+is driven by command-line arguments and a configuration file, allowing for flexible experimentation.
+The training loop is designed to be generic, with agent-specific logic encapsulated within the agent classes.
+The script handles environment setup, checkpointing, periodic evaluation, the main training loop and logging 
+metrics to TensorBoard.
+
+Usage:
+    python train.py --agent <agent_name> --config <path_to_config_yaml>
+
+Examples:
+    python train.py --agent dqn --config ./configs/dqn.yaml
+    python train.py --agent ppo --config ./configs/ppo.yaml
+"""
+
 import torch
 import time
 import argparse  # Import the argument parsing library
@@ -9,7 +24,6 @@ from torch.utils.tensorboard import SummaryWriter
 import gc
 
 # Import our custom modules
-from common.wrappers import PreprocessAndStackFrames, RewardWrapper
 from common.utils import load_config, setup_environment_and_agent
 from agents import create_agent  # Import our new factory function
 

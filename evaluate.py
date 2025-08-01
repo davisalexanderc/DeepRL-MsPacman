@@ -13,6 +13,7 @@ from pathlib import Path
 # Import our custom modules
 #from common.wrappers import PreprocessAndStackFrames
 from common.utils import setup_environment_and_agent
+
 #from agents import create_agent
 
 def play_one_game(agent: object, env: gym.Env) -> dict:
@@ -116,7 +117,7 @@ def evaluate_agent(agent: object, env: gym.Env, num_games: int = 10, show_progre
     """
 
     all_game_stats = []
-    agent.q_policy_net.eval()  # Set the policy network to evaluation mode
+    agent.set_eval_mode()  # Set the policy network to evaluation mode
     game_range = range(num_games)
 
     if show_progress:
@@ -129,8 +130,8 @@ def evaluate_agent(agent: object, env: gym.Env, num_games: int = 10, show_progre
     # Convert the collected stats into a DataFrame
     all_game_stats_df = pd.DataFrame(all_game_stats)
 
-    agent.q_policy_net.train()  # Reset back to training mode
-    
+    agent.set_train_mode()  # Reset back to training mode
+
     return all_game_stats_df
 
 def find_checkpoints(run_path: Path) -> list[Path]:

@@ -226,3 +226,27 @@ class DQNAgent:
         self.q_policy_net.load_state_dict(state_dict)
         self.q_target_net.load_state_dict(state_dict)
         #print(f"\nModel loaded from {path}")
+
+    def set_eval_mode(self) -> None:
+        """
+        Set the policy network to evaluation mode.
+
+        Parameters:
+        - None
+
+        Returns:
+        - None
+        """
+        self.q_policy_net.eval()
+
+    def set_train_mode(self) -> None:
+        """
+        Set the policy network to training mode.
+
+        Parameters:
+        - None
+
+        Returns:
+        - None
+        """
+        self.q_policy_net.train()

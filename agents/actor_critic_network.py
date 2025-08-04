@@ -1,12 +1,34 @@
-# agents/actor_critic_network.py
+"""
+Defines the Actor-Critic network architecture for the PPO agent.
+
+This module contains the `ActorCriticNetwork` class, a convolutional neural
+network (CNN) that serves both the policy (actor) and the value function (critic).
+It uses a shared convolutional base to extract features from the environment's
+state, which are then fed into two separate fully-connected "heads."
+"""
+
+from typing import Tuple
 
 import torch
 import torch.nn as nn
 from torch.distributions import Categorical
 
 class ActorCriticNetwork(nn.Module):
-    """
-    The neural network for the PPO agent.
+    """A CNN with separate heads for the Actor (policy) and Critic (value).
+
+    This network processes image-based states to produce two outputs:
+    1.  **Action Logits (Actor):** A vector representing the preference for each
+        action. These are used to create a probability distribution over actions.
+    2.  **State Value (Critic):** A single scalar value estimating the expected
+        return from the current state (V(s)).
+
+    Architecture:
+        - A shared convolutional base (identical to the DQN network) extracts a
+          feature vector from the input state.
+        - The **Actor Head** is a multi-layer perceptron (MLP) that maps the
+          feature vector to action logits.
+        - The **Critic Head** is an MLP that maps the feature vector to a single
+          state-value.
     """
     def __init__(self, input_shape: tuple, num_actions: int) -> None:
         """
@@ -19,10 +41,10 @@ class ActorCriticNetwork(nn.Module):
         Returns:
         - None
         """
-        super(ActorCriticNetwork, self).__init__()
-
-        # Shared Convolutional Base
+        super().__init__()
         in_channels = input_shape[0]
+
+        # Define the convolutional layers
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, 32, kernel_size=8, stride=4),
             nn.ReLU(),
@@ -37,16 +59,16 @@ class ActorCriticNetwork(nn.Module):
 
         # Actor Head
         self.actor_head = nn.Sequential(
-            nn.Linear(conv_out_size, 512),
+            nn.Linear(in_features=conv_out_size, out_features=512),
             nn.ReLU(),
-            nn.Linear(512, num_actions)
+            nn.Linear(in_features=512, out_features=num_actions)
         )
 
         # Critic Head
         self.critic_head = nn.Sequential(
-            nn.Linear(conv_out_size, 512),
+            nn.Linear(in_features=conv_out_size, out_features=512),
             nn.ReLU(),
-            nn.Linear(512, 1)
+            nn.Linear(in_features=512, out_features=1)
         )
 
     def _get_conv_out_size(self, shape: tuple) -> int:
@@ -71,7 +93,7 @@ class ActorCriticNetwork(nn.Module):
         Forward pass through the network.
 
         Parameters:
-        - x (torch.Tensor): Input observation tensor.
+        - x (torch.Tensor): Input observation tensor. Shape: (N, C, H, W).
 
         Returns:
         - tuple: (action_probs, state_value)
@@ -88,15 +110,21 @@ class ActorCriticNetwork(nn.Module):
     
     def get_action_dist(self, x: torch.Tensor) -> Categorical:
         """
-        Get the action distribution for the given input.
+        A helper method to get the action distribution from the actor head.
+
+        This method performs a forward pass through the shared base and the actor
+        head, then wraps the resulting logits in a PyTorch Categorical distribution
+        object, which is useful for sampling actions and calculating entropy.
 
         Parameters:
         - x (torch.Tensor): Input observation tensor.
 
         Returns:
-        - Categorical: Action distribution.
+        - action_dist (Categorical): A categorical distribution over actions.
         """
-        action_logits = self.actor_head(self.conv(x).view(x.size(0), -1))
+        features = self.conv(x)
+        features_flat = features.view(x.size(0), -1)
+        action_logits = self.actor_head(features_flat)
 
         action_dist = Categorical(logits=action_logits)
         return action_dist
@@ -109,8 +137,10 @@ class ActorCriticNetwork(nn.Module):
         - x (torch.Tensor): Input observation tensor.
 
         Returns:
-        - torch.Tensor: Estimated value of the state.
+        - state_value (torch.Tensor): Estimated value of the state.
         """
-        state_value = self.critic_head(self.conv(x).view(x.size(0), -1))
+        features = self.conv(x)
+        features_flat = features.view(x.size(0), -1)
+        state_value = self.critic_head(features_flat)
 
         return state_value

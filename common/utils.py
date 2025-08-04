@@ -1,15 +1,24 @@
-# common/utils.py
+"""
+General utility functions shared across the project.
 
-import yaml
+This module contains common helper functions used for tasks like loading
+configuration files and setting up the training/evaluation environment and agent.
+Keeping these functions here avoids code duplication in `train.py` and
+`evaluate.py`.
+"""
+
+from pathlib import Path
+from typing import Dict, Any, Tuple, List, Optional
+
 import gymnasium as gym
 import torch
-import numpy as np
+import yaml
 from gymnasium.wrappers import RecordVideo
 
 from common.wrappers import PreprocessAndStackFrames, RewardWrapper, AtariWrapper
 from agents import create_agent
 
-def load_config(config_path):
+def load_config(config_path: Path) -> Dict[str, Any]:
     """
     Load a YAML configuration file and return its contents as a dictionary.
 
@@ -23,104 +32,27 @@ def load_config(config_path):
         config = yaml.safe_load(file)
     return config
 
-def generate_video(agent, config: dict, timestep: int) -> None:
+def setup_environment_and_agent(config: Dict[str, Any]) -> Tuple[gym.Env, object, torch.device]:
     """
-    Generate a video of the agent playing one episode in a specific environment.
+    Creates, wraps, and sets up the environment and agent for a run.
 
-    Parameters:
-    - agent: The trained agent with a method get_greedy_action(state).
-    - config (dict): Configuration dictionary containing environment and video settings.
-    - timestep (int): The current training timestep, used for naming the video folder.
-
-    Returns:
-    - None
-    """
-    video_env = gym.make(config['env_id'], render_mode="rgb_array")
-    video_env.metadata['render_fps'] = 60
-
-    video_folder = f"{config['video_folder_path']}{config['env_id'].split('/')[-1]}_step_{timestep}"
-
-    video_env = PreprocessAndStackFrames(video_env, 
-                                         num_stack=config.get('frame_stack',4), 
-                                         shape=(config.get('frame_height',84), config.get('frame_width',84)))
-    
-    video_env = RecordVideo(video_env, video_folder=video_folder, episode_trigger=lambda x: x==0)
-
-    print(f"\n--- Generating Video at Timestep {timestep} ---")
-
-    state, info = video_env.reset()
-    device = agent.device
-    done = False
-    while not done:
-        action = agent.get_greedy_action(state)
-        next_state, reward, terminated, truncated, info = video_env.step(action)
-        state = next_state
-        done = terminated or truncated
-
-    video_env.close()
-    print(f"--- Video saved to {video_folder} ---")
-
-def setup_environment_and_agent_old(config: dict) -> tuple:
-    """
-    Set up the environment and agent based on the provided configuration.
-
-    Parameters:
-    - config (dict): Configuration dictionary containing all necessary parameters.
-
-    Returns:
-    - env: The wrapped environment.
-    - agent: The instantiated agent.
-    - device: The device (CPU or GPU) on which the agent will run.
-    """
-    device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    
-    env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
-    
-    env = PreprocessAndStackFrames(env, num_stack=4, shape=(84, 84))
-
-    if config.get('enable_reward_shaping', False):
-        print("Reward Shaping Enabled.")
-        wrapped_env = RewardWrapper(
-            env,
-            enable_level_completion_bonus=config.get('enable_level_completion_bonus', False),
-            level_completion_bonus=config.get('level_completion_bonus', 0.0),
-            enable_death_penalty=config.get('enable_death_penalty', False),
-            death_penalty=config.get('death_penalty', 0.0),
-            enable_time_penalty=config.get('enable_time_penalty', False),
-            time_penalty_per_step=config.get('time_penalty_per_step', 0.0)
-        )
-    else:
-        print("Reward Shaping Disabled.")
-        wrapped_env = env
-
-
-    input_shape = wrapped_env.observation_space.shape
-    num_actions = wrapped_env.action_space.n
-    
-    agent = create_agent(
-        agent_name=config['agent'],
-        config=config,
-        input_shape=input_shape,
-        num_actions=num_actions,
-        device=device,
-    )
-    print(f"{config['agent'].upper()} Agent instantiated.")
-    
-    return wrapped_env, agent, device
-
-
-def setup_environment_and_agent(config: dict) -> tuple:
-    """
-    Set up the environment and agent based on the provided configuration.
-    This version uses a single, unified AtariWrapper.
+    This function handles the complete setup process:
+    1. Determines the compute device (CUDA or CPU).
+    2. Creates the base Gymnasium environment.
+    3. Applies the unified `AtariWrapper` for preprocessing and reward shaping.
+    4. Instantiates the appropriate agent (DQN or PPO) using the factory pattern.
 
     Parameters:
     - config (dict): Configuration dictionary.
 
     Returns:
-    - tuple: (wrapped_env, agent, device)
+    - tuple:
+        - wrapped_env (gym.Env): The wrapped Gymnasium environment ready for training/evaluation.
+        - agent (object): The instantiated agent (DQN or PPO).
+        - device (torch.device): The compute device being used (CUDA or CPU).
     """
+
+    # Determine the compute device (CUDA or CPU)
     device = torch.device(config.get('device', 'cuda') if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
@@ -146,3 +78,89 @@ def setup_environment_and_agent(config: dict) -> tuple:
     print(f"{config['agent'].upper()} Agent instantiated.")
     
     return wrapped_env, agent, device
+
+def generate_video(agent_type: str, run_name: str, checkpoint_timestep: int, video_filename: Optional[str] = None) -> None:
+    """Creates a video recording of a trained agent from a specific checkpoint.
+
+    This function loads a specific agent checkpoint, sets up the appropriate
+    environment, and records a video of the agent playing a single episode.
+
+    Parameters:
+        - agent_type (str): The type of agent to load ('dqn' or 'ppo').
+        - run_name (str): The name of the training run folder (e.g., 'DQN_Run_1').
+        - checkpoint_timestep (int): The timestep of the checkpoint to load.
+        - video_filename (str, optional): The desired filename for the output video (without extension). If None, a default name is used.
+    Returns:
+        - None
+    """
+    print(f"--- Generating video for {run_name} at timestep {checkpoint_timestep} ---")
+    project_root = Path.cwd()
+
+    # Load the configuration for the specified agent type
+    config_path = project_root / "configs" / f"{agent_type.lower()}_config.yaml"
+    if not config_path.exists():
+        raise FileNotFoundError(f"Config file not found at: {config_path}")
+    
+    config = load_config(config_path)
+    config['agent'] = agent_type
+    
+    # Setup environment and agent
+    _, agent, _ = setup_environment_and_agent(config)
+    
+    # Load the specified checkpoint
+    checkpoint_dir = project_root / "models" / f"{agent_type.lower()}_checkpoints" / run_name
+    
+    # Find the matching checkpoint file. 
+    checkpoint_path = None
+    for checkpoint_file in checkpoint_dir.glob("*.pth"):
+        if f"step_{checkpoint_timestep}.pth" in checkpoint_file.name:
+            checkpoint_path = checkpoint_file
+            break
+    
+    if not checkpoint_path:
+        raise FileNotFoundError(f"Checkpoint for timestep {checkpoint_timestep} not found in {checkpoint_dir}")
+        
+    # Load the model weights
+    agent.load(checkpoint_path)
+    print(f"Successfully loaded checkpoint: {checkpoint_path.name}")
+
+    # Prepare the video directory
+    video_dir = project_root / "videos"
+    video_dir.mkdir(exist_ok=True)
+
+    # Determine the output filename
+    if video_filename is None:
+        video_filename = f"{run_name}_step_{checkpoint_timestep}.mp4"
+    else:
+        video_filename = f"{video_filename}.mp4"
+        
+    video_path = video_dir / video_filename
+
+    # Create the base environment
+    video_env = gym.make("ALE/MsPacman-v5", render_mode="rgb_array")
+    
+    # Wrap the environment with the unified AtariWrapper
+    wrapped_video_env = AtariWrapper(video_env, config)
+
+    # Apply the video recorder wrapper
+    final_video_env = RecordVideo(
+        env=wrapped_video_env,
+        video_folder=str(video_dir),
+        name_prefix=video_filename.replace(".mp4", ""),
+        episode_trigger=lambda x: x == 0  # Record the very first episode
+    )
+
+    # Play one episode and record the video
+    agent.set_eval_mode()
+    state, _ = final_video_env.reset()
+    done = False
+    print("Playing episode...")
+    while not done:
+        action = agent.get_greedy_action(state)
+        state, _, terminated, truncated, _ = final_video_env.step(action)
+        done = terminated or truncated
+
+    # Cleanup
+    final_video_env.close()
+    agent.set_train_mode()
+    print(f"--- Video saved successfully to: {video_path} ---")

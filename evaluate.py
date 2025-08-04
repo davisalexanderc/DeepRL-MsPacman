@@ -1,25 +1,36 @@
-# evaluate.py
+"""
+A collection of utility functions for evaluating trained RL agents.
 
-import gymnasium as gym
-import torch
-import numpy as np
-import pandas as pd
-from tqdm import tqdm
-import matplotlib.pyplot as plt
-import seaborn as sns
+This module provides the core tools needed to run an evaluation pass on a
+trained agent. It includes functions to play a single game, evaluate an agent
+over multiple games, find saved model checkpoints, and calculate summary
+statistics from the evaluation results. These functions are designed to be
+imported and used by a higher-level analysis script or notebook.
+"""
+
 import re
 from pathlib import Path
+from typing import List, Dict, Any
+
+import gymnasium as gym
+import numpy as np
+import pandas as pd
+import torch
+from tqdm import tqdm
 
 # Import our custom modules
-#from common.wrappers import PreprocessAndStackFrames
 from common.utils import setup_environment_and_agent
 
 #from agents import create_agent
 
 def play_one_game(agent: object, env: gym.Env) -> dict:
     """
-    Play a single game until the end with the agent acting greedily.
-    Tracks and returns desired metrics.
+    Plays a single game episode using the agent's greedy policy.
+
+    This function resets the environment and runs an episode until it terminates
+    or is truncated. At each step, it uses the agent's deterministic
+    `get_greedy_action` method to select an action. It tracks and returns key
+    performance metrics for the episode.
     
     Parameters:
     - agent: The trained agent with a method get_greedy_action(state).
@@ -28,42 +39,41 @@ def play_one_game(agent: object, env: gym.Env) -> dict:
     Returns:
     - game_stats (dict): A dictionary containing game statistics such as score, steps, max level reached, and level completion status.
     """
-    game_stats = {
-        'score': 0,
-        'steps': 0,
-        'max_level_reached': 0,
-        'level_1_completed': False, # Track if level 1 was completed
-    }
-
+    # Initialize environment and variables
     state, info = env.reset()
     terminated = False
     truncated = False
-    current_level = info.get('current_level', 0)
 
+    game_stats = {
+        'score': 0,
+        'steps': 0,
+        'max_level_reached': info.get('current_level', 0), # Track the highest level reached
+        'level_1_completed': False, # Track if level 1 was completed
+    }
+
+    # Current level tracking
     while not (terminated or truncated):
         action = agent.get_greedy_action(state)
-        next_state, reward, terminated, truncated, info = env.step(action)
-        game_stats['score'] += reward
-        game_stats['steps'] += 1
+        state, reward, terminated, truncated, info = env.step(action)
 
-        # Update current level if info provides it
-        current_level = info.get('current_level', current_level)
-        
-        state = next_state
+        # Update game statistics
+        game_stats['steps'] += 1
+        game_stats['score'] += reward
+
+        # Update max level reached
+        game_stats['max_level_reached'] = max(info.get('current_level', 0), game_stats['max_level_reached'])
 
     # Collecting game statistics
-    game_stats['max_level_reached'] = current_level
-    game_stats['level_1_completed'] = current_level > 0 # Level 1 is index 0
-
-    #print(f"Game finished. Final Score: {game_stats['score']}, Max level: reached {game_stats['max_level_reached']}")
+    game_stats['level_1_completed'] = game_stats['max_level_reached'] > 0 # Level 1 is index 0
 
     return game_stats
 
 def calculate_summary_stats(raw_results_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Calculate summary statistics from the raw, per-game results DataFrame.
+    Calculates a DataFrame of summary statistics from raw game results.
 
-    If the input DataFrame is empty, return an empty DataFrame.
+    Given a DataFrame where each row is a game, this function computes aggregate
+    metrics like mean, standard deviation, quantiles, and completion rates.
 
     Parameters:
     - raw_results_df (pd.DataFrame): DataFrame containing the raw results.
@@ -99,12 +109,16 @@ def calculate_summary_stats(raw_results_df: pd.DataFrame) -> pd.DataFrame:
         'max_level_reached': raw_results_df['max_level_reached'].max(),
     }
 
+    # Create a DataFrame from the summary statistics
     summary_df = pd.DataFrame([summary_dict])
-    return summary_df
+    return summary_df.reindex(columns=summary_cols)  # Ensure consistent column order
 
 def evaluate_agent(agent: object, env: gym.Env, num_games: int = 10, show_progress: bool = True) -> pd.DataFrame:
     """
-    Evaluate the trained agent on the specified environment and return the results.
+    Evaluates a trained agent over a specified number of games.
+
+    This function orchestrates the evaluation by repeatedly calling `play_one_game`.
+    It ensures the agent's network is in evaluation mode during the process.
 
     Parameters:
     - agent: The trained agent with a method get_greedy_action(state).
@@ -118,6 +132,8 @@ def evaluate_agent(agent: object, env: gym.Env, num_games: int = 10, show_progre
 
     all_game_stats = []
     agent.set_eval_mode()  # Set the policy network to evaluation mode
+
+    # Use tqdm for progress bar if requested
     game_range = range(num_games)
 
     if show_progress:
@@ -136,16 +152,22 @@ def evaluate_agent(agent: object, env: gym.Env, num_games: int = 10, show_progre
 
 def find_checkpoints(run_path: Path) -> list[Path]:
     """
-    Find all checkpoint files in the given run directory.
+    Finds and sorts all model checkpoint files in a directory.
+
+    This function scans a given path for files ending in '.pth' and sorts them
+    numerically based on the training step number in the filename.
+
     Checkpoints are expected to be named like 'dqn_model_step_1000000.pth'.
 
     Parameters:
     - run_path: Path object pointing to the run directory.
 
     Returns:
-    - List of Path objects for each checkpoint file, sorted by step number.
+    - checkpoint_files (List[Path]): A list of Path objects for each checkpoint file, sorted by step number.
     """
+
     print(f"Searching for checkpoints in: {run_path}")
+    # Ensure the path exists and is a directory
     if not run_path.exists() or not run_path.is_dir():
         raise FileNotFoundError(f"Run path {run_path} does not exist or is not a directory.")
 
@@ -157,41 +179,3 @@ def find_checkpoints(run_path: Path) -> list[Path]:
 
     print(f"Found {len(checkpoint_files)} checkpoints in {run_path}")
     return checkpoint_files
-
-def run_batch_evaluation(checkpoint_files: list[Path], config: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Run batch evaluation on a list of checkpoint files.
-
-    Parameters:
-    - checkpoint_files: List of Path objects for each checkpoint file.
-    - config_path: Path to the configuration file.
-
-    Returns:
-    - Tuple of two DataFrames:
-      - final_raw_df: The master DataFrame of all the raw per-game results.
-      - final_summary_df: The final summary DataFrame, indexed by timestep.
-    """
-    wrapped_env, agent, device = setup_environment_and_agent(config)
-
-    all_raw_results = []
-
-    for model_path in checkpoint_files:
-        print(f"\nEvaluating Checkpoint: {model_path.name}")
-
-        agent.load(str(model_path))
-        agent.q_policy_net.eval()  # Set the policy network to evaluation mode
-
-        raw_df_for_checkpoint = evaluate_single_checkpoint(agent, wrapped_env, num_games=config.get('num_games'))
-
-        # Add metadata columns
-        timestep = int(re.search(r'step_(\d+)\.pth$', model_path.name).group(1))
-        raw_df_for_checkpoint['timestep'] = timestep
-        all_raw_results.append(raw_df_for_checkpoint)
-
-    wrapped_env.close()
-
-    # Concatenate all results into a single DataFrame and calculate summary stats
-    final_raw_df = pd.concat(all_raw_results, ignore_index=True)
-    final_summary_df = calculate_summary_stats(final_raw_df)
-
-    return final_raw_df, final_summary_df

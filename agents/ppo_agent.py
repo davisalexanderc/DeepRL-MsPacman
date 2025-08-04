@@ -1,14 +1,39 @@
-# agents/ppo_agent.py
+"""
+Implements the Proximal Policy Optimization (PPO) agent.
+
+This module contains the PPOAgent class, which learns to play Ms. Pac-Man
+using the PPO-Clip algorithm with Generalized Advantage Estimation (GAE).
+"""
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+from pathlib import Path
+from typing import Tuple, List, Dict, Any
+from torch.utils.tensorboard import SummaryWriter
 
 # Import our custom network
 from .actor_critic_network import ActorCriticNetwork
 
 class PPOAgent:
+    """A Proximal Policy Optimization (PPO) agent for playing Atari games.
+
+    This agent implements the PPO-Clip algorithm, a popular on-policy method
+    known for its stability and reliable performance. It uses an Actor-Critic
+    architecture where one network outputs both a policy (actor) and a state-value
+    function (critic).
+
+    Key features:
+    1.  **On-Policy Learning:** Learns from a fixed-size batch of experiences (a
+        "rollout") collected with the current policy.
+    2.  **Generalized Advantage Estimation (GAE):** Uses GAE to compute a
+        low-variance estimate of the advantage function, which helps stabilize
+        training.
+    3.  **Clipped Surrogate Objective:** The "clip" in PPO-Clip. It constrains
+        the policy update to prevent excessively large changes, which keeps
+        the learning process stable.
+    """
     def __init__(self, config: dict, input_shape: tuple, num_actions: int, device: torch.device):
         """
         Initializes the PPO agent.
@@ -53,12 +78,13 @@ class PPOAgent:
         # keep track of the current step
         self.rollout_step_counter = 0
 
-# In the PPOAgent class in agents/ppo_agent.py
-
     def act(self, state: np.ndarray) -> tuple[int, torch.Tensor, torch.Tensor]:
         """
-        Select an action from the policy, and get the action's log probability
-        and the state's value from the critic.
+        Selects a stochastic action from the policy for training.
+
+        This method gets a probability distribution over actions from the actor,
+        samples an action from it, and returns the action along with its
+        log probability and the critic's value estimate for the state.
 
         Parameters:
         - state (np.ndarray): The current state of the environment.
@@ -70,21 +96,13 @@ class PPOAgent:
             - value (torch.Tensor): The value of the state as estimated by the critic.
         """
         # Convert the numpy state to a tensor and normalize
-        # Note: We add an unsqueeze(0) to create a batch dimension of 1
         state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0) / 255.0
         
-        # We use torch.no_grad() because we are just performing inference, not training
+        # Use the network to get the action distribution and value
         with torch.no_grad():
-            # Get the action distribution from the network's actor head
             action_dist = self.network.get_action_dist(state_tensor)
-            
-            # Sample an action from the distribution
             action = action_dist.sample()
-            
-            # Get the log probability of that specific action
             log_prob = action_dist.log_prob(action)
-            
-            # Get the value of the state from the network's critic head
             value = self.network.get_value(state_tensor)
             
         return action.item(), log_prob, value.squeeze()
@@ -100,14 +118,12 @@ class PPOAgent:
         - log_prob (torch.Tensor): The log probability of the action taken.
         - value (torch.Tensor): The critic's value of the state.
         """
-        # Ensure that tensors passed in are on the correct device
-        # This is a good defensive programming practice
+        # Convert to tensors
         action_tensor = torch.tensor([action], device=self.device)
         reward_tensor = torch.tensor([reward], device=self.device)
         done_tensor = torch.tensor([done], device=self.device)
 
-        # Store the experience at the current step index in our pre-allocated tensors
-        # The .clone() is important for log_prob and value to avoid issues with the computation graph
+        # Store the experience in the rollout buffer
         self.states[self.rollout_step_counter] = torch.tensor(state, dtype=torch.uint8, device=self.device)
         self.actions[self.rollout_step_counter] = action_tensor
         self.rewards[self.rollout_step_counter] = reward_tensor
@@ -129,7 +145,7 @@ class PPOAgent:
         - torch.Tensor: The calculated advantages for the rollout.
         """
 
-        # We need to get the value of the very last state to "bootstrap" from
+        # Get the value of the next state from the critic
         with torch.no_grad():
             next_state_tensor = torch.tensor(next_state, dtype=torch.float32, device=self.device).unsqueeze(0) / 255.0
             next_value = self.network.get_value(next_state_tensor).squeeze()
@@ -160,14 +176,17 @@ class PPOAgent:
         """
         The main learning method. Calculates advantages and updates the network
         for several epochs using mini-batches of the rollout data.
+
+        Parameters:
+        - next_state (np.ndarray): The state after the last action taken in the rollout.
+        - next_done (bool): Whether the episode has ended after the last action.
+        
+        Returns:
+        - None
         """
-        # --- 1. Calculate Advantages and Returns ---
         advantages = self._calculate_advantages(next_state, next_done)
-        # The "return" is the advantage plus the value estimate. It's what the critic tries to predict.
         returns = advantages + self.values
 
-        # --- 2. Flatten the rollout data for easier processing ---
-        # We convert the rollout data (num_steps, ...) into a single flat batch
         # Normalizing the states tensor here
         b_states = self.states.float() / 255.0
         b_actions = self.actions.view(-1)
@@ -176,16 +195,12 @@ class PPOAgent:
         b_returns = returns.view(-1)
         b_values = self.values.view(-1)
 
-        # --- 3. The PPO Update Loop ---
-        # Get the indices for the entire batch
         batch_size = self.num_steps
-
         mini_batch_size = batch_size // self.num_mini_batches
-
         batch_indices = np.arange(batch_size)
         
         for epoch in range(self.num_epochs):
-            # Shuffle the indices at the start of each epoch
+            # Shuffle the batch indices for each epoch
             np.random.shuffle(batch_indices)
             
             # Loop over the data in mini-batches
@@ -193,8 +208,7 @@ class PPOAgent:
                 end = start + mini_batch_size
                 mini_batch_indices = batch_indices[start:end]
 
-                # --- Get the data for the current mini-batch ---
-                # Using the shuffled indices, we select a slice from our flattened tensors
+                # Create mini-batches
                 mb_states = b_states[mini_batch_indices]
                 mb_actions = b_actions[mini_batch_indices]
                 mb_log_probs = b_log_probs[mini_batch_indices]
@@ -202,13 +216,13 @@ class PPOAgent:
                 mb_returns = b_returns[mini_batch_indices]
                 mb_values = b_values[mini_batch_indices]
 
-                # --- Forward pass to get new values from the network ---
+                # Forward pass to get new values from the network
                 new_dist = self.network.get_action_dist(mb_states)
                 new_log_probs = new_dist.log_prob(mb_actions)
                 entropy = new_dist.entropy()
                 new_values = self.network.get_value(mb_states).view(-1)
 
-                # --- Calculate the Policy Loss (Actor) ---
+                # Calculate the Policy Loss (Actor)
                 log_ratio = new_log_probs - mb_log_probs
                 ratio = torch.exp(log_ratio)
                 
@@ -217,21 +231,21 @@ class PPOAgent:
                 policy_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon)
                 policy_loss = torch.max(policy_loss1, policy_loss2).mean()
 
-                # --- Calculate the Value Loss (Critic) ---
+                # Calculate the Value Loss (Critic)
                 value_loss = nn.MSELoss()(new_values, mb_returns)
                 
-                # --- Calculate the Total Loss ---
+                # Calculate the Total Loss
                 loss = (policy_loss - 
                         self.entropy_coeff * entropy.mean() + 
                         self.value_loss_coeff * value_loss)
 
-                # --- Perform Gradient Descent ---
+                # Perform Gradient Descent
                 self.optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.network.parameters(), 0.5) # Clip gradients for stability
                 self.optimizer.step()
 
-        # --- 4. Reset the rollout buffer index for the next collection phase ---
+        # Reset the rollout step counter after learning
         self.rollout_step_counter = 0
 
     def save(self, path: str) -> None:
@@ -245,7 +259,6 @@ class PPOAgent:
         - None
         """
         torch.save(self.network.state_dict(), path)
-        #print(f"\nModel saved to {path}")
 
     def load(self, path: str) -> None:
         """
@@ -259,9 +272,6 @@ class PPOAgent:
         """
         state_dict = torch.load(path, map_location=self.device)
         self.network.load_state_dict(state_dict)
-        #print(f"\nModel loaded from {path}")
-
-    from torch.utils.tensorboard import SummaryWriter
 
     def log_metrics(self, writer: SummaryWriter, global_step: int) -> None:
         """

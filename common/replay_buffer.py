@@ -1,4 +1,12 @@
-# comon/replay_buffer.py
+"""
+Implements the Experience Replay Buffer for the DQN agent.
+
+This module defines the `ReplayBuffer` class, which stores transitions
+(state, action, reward, next_state, done) observed by the agent. Storing and
+sampling experiences randomly from this buffer helps to de-correlate the data
+used for training, leading to more stable learning.
+"""
+from typing import Tuple
 
 import random
 import numpy as np
@@ -8,8 +16,26 @@ Experience = namedtuple("Experience",
                         field_names=["state", "action", "reward", "next_state", "done"])
 
 class ReplayBuffer:
-    """
-    Experience replay buffer to store and sample experiences.
+    """A fixed-size circular buffer for storing and sampling experience tuples.
+
+    This class implements the Experience Replay mechanism, a crucial component for
+    stabilizing the training of off-policy reinforcement learning agents like DQN.
+    By storing a history of agent-environment interactions (experiences) and
+    sampling mini-batches from this history, it addresses two key issues:
+
+    1.  **Breaking Temporal Correlations:** Standard deep learning assumes that
+        training data is independent and identically distributed (i.i.d.).
+        In RL, consecutive states are highly correlated. By sampling randomly
+        from the buffer, we break these correlations, making the training data
+        more i.i.d. and stabilizing the learning process.
+    2.  **Reusing Past Experiences:** It allows the agent to learn from the same
+        experience multiple times, increasing sample efficiency. Rare but important
+        experiences are not lost after a single gradient update.
+
+    The buffer is implemented using a `collections.deque` with a fixed `maxlen`,
+    which provides efficient O(1) appends and pops from both ends. When the
+    buffer reaches its capacity, adding a new experience automatically discards
+    the oldest one.
     """
 
     def __init__(self, capacity, batch_size):

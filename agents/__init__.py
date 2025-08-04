@@ -1,4 +1,15 @@
-# agents/__init__.py
+"""
+agents Package Initialization
+
+This package contains the implementations of the Reinforcement Learning agents
+used in this project.
+
+This __init__.py file exposes the `create_agent` factory function, which provides
+a convenient way to instantiate a specific agent based on a string identifier.
+This decouples the agent creation logic from the main training script.
+"""
+
+from typing import Dict, Any, Tuple
 
 import torch
 from .dqn_agent import DQNAgent
@@ -7,7 +18,11 @@ from .ppo_agent import PPOAgent
 def create_agent(agent_name: str, config: dict, input_shape: tuple, 
                  num_actions: int, device: torch.device):
     """
-    Factory function to create an agent based on the agent name.
+    A factory function for creating RL agents.
+
+    This function abstracts the agent instantiation process. Based on the
+    `agent_name` string, it returns an initialized instance of the corresponding
+    agent class.
 
     Parameters:
     - agent_name (str): The name of the agent to create.

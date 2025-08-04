@@ -1,10 +1,18 @@
-# agents/dqn_agent.py
+"""
+Implements the Deep Q-Network (DQN) agent.
+
+This module contains the DQNAgent class, which learns to play Ms. Pac-Man
+using the DQN algorithm with a replay buffer and a target network for stability.
+"""
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
 import numpy as np
+from pathlib import Path
+from typing import Tuple, List, Dict, Any
+from torch.utils.tensorboard import SummaryWriter
 
 # import components we built
 from common.replay_buffer import ReplayBuffer, Experience
@@ -12,7 +20,18 @@ from .q_network import QNetwork
     
 class DQNAgent:
     """
-    The DQN agent that interacts with the environment and learns from experiences.
+    A Deep Q-Network agent for playing Atari games.
+
+    This agent implements the DQN algorithm, which uses a deep neural network to
+    approximate the optimal action-value function (Q-function). It incorporates
+    two key features for stable learning:
+    1.  **Experience Replay:** Stores transitions in a ReplayBuffer to break
+        the correlation between consecutive experiences.
+    2.  **Target Network:** Uses a separate, periodically updated target network
+        to provide stable targets for the Bellman equation update, preventing
+        oscillations and divergence.
+
+    The agent interacts with the environment using an epsilon-greedy policy for exploration.
     """
 
     def __init__(self, config: dict, input_shape: tuple, num_actions: int, device: torch.device) -> None:
@@ -20,14 +39,11 @@ class DQNAgent:
         Initialize the DQN agent.
 
         Parameters:
-        - input_shape (tuple): The shape of the input frames (num_stack, height, width).
-        - num_actions (int): The number of actions the agent can take.
-        - replay_buffer_capacity (int): The maximum size of the replay buffer.
-        - batch_size (int): The batch size for sampling experiences.
-        - learning_rate (float): The learning rate for the optimizer.
-        - gamma (float): The discount factor for future rewards.
-        - device (torch.device): The device to run the computations on (CPU or GPU).
-
+        - config (dict): Configuration dictionary containing hyperparameters.
+        - input_shape (tuple): Shape of the input observations (e.g., (4, 84, 84)).
+        - num_actions (int): Number of possible actions in the environment.
+        - device (torch.device): The compute device (CPU or CUDA) to use.
+        
         Returns:
         - None
         """
@@ -59,7 +75,11 @@ class DQNAgent:
 
     def act(self, state: torch.Tensor) -> int:
         """
-        Select an action based on the current state and epsilon-greedy policy.
+        Selects an action using an epsilon-greedy policy.
+
+        During training, the agent will choose a random action with probability
+        epsilon, and the greedy action (the one with the highest Q-value) with
+        probability 1-epsilon. Epsilon decays linearly over time.
 
         Parameters:
         - state (torch.Tensor): The current state of the environment.
@@ -124,7 +144,8 @@ class DQNAgent:
 
         loss_value = loss.item()
 
-        # Free up memory to stop memory leaks
+        # Free up memory to stop memory leaks in long training runs. This was observed
+        # to be necessary when training for many timesteps.
         del states_tensor, actions_tensor, rewards_tensor, next_states_tensor, dones_tensor
         del all_q_values, predicted_q_values, next_state_q_values, target_q_values, loss
 
@@ -154,7 +175,6 @@ class DQNAgent:
         - None
         """
         torch.save(self.q_policy_net.state_dict(), path)
-        #print(f"\nModel saved to {path}")
 
     def get_greedy_action(self, state: np.ndarray) -> int:
         """
@@ -167,11 +187,13 @@ class DQNAgent:
         - action (int): The action with the highest Q-value.
         """
 
+        # Convert state to tensor and add batch dimension
         state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0) / 255.0
 
         with torch.no_grad():
             q_values = self.q_policy_net(state_tensor)
 
+        # Select the action with the highest Q-value
         action = q_values.max(1)[1].item()
 
         return action
@@ -200,7 +222,7 @@ class DQNAgent:
         Log metrics to TensorBoard.
 
         Parameters:
-        - writer: The TensorBoard writer instance.
+        - writer (SummaryWriter): The TensorBoard writer instance.
         - global_step (int): The current training timestep.
 
         Returns:
@@ -210,6 +232,7 @@ class DQNAgent:
         epsilon = np.interp(global_step,
                             [0, self.config['epsilon_decay_duration']],
                             [self.config['epsilon_start'], self.config['epsilon_end']])
+        
         writer.add_scalar("charts/epsilon", epsilon, global_step=global_step)
 
     def load(self, path: str) -> None:
@@ -225,7 +248,6 @@ class DQNAgent:
         state_dict = torch.load(path, map_location=self.device)
         self.q_policy_net.load_state_dict(state_dict)
         self.q_target_net.load_state_dict(state_dict)
-        #print(f"\nModel loaded from {path}")
 
     def set_eval_mode(self) -> None:
         """

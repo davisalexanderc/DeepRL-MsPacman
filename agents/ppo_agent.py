@@ -253,6 +253,9 @@ class PPOAgent:
 
         Parameters:
         - path (str): The file path to load the model from.
+
+        Returns:
+        - None
         """
         state_dict = torch.load(path, map_location=self.device)
         self.network.load_state_dict(state_dict)
@@ -267,8 +270,59 @@ class PPOAgent:
         Parameters:
         - writer: The TensorBoard writer instance.
         - global_step (int): The current training timestep.
+
+        Returns:
+        - None
         """
-        # We can log the average state value estimated by the critic during the last rollout.
-        # This can give a hint about the agent's performance.
+        # Log the average value of the critic over the last rollout
         average_value = self.values.mean().item()
-        writer.add_scalar("charts/average_value", average_value, global_step=global_step) 
+        writer.add_scalar("charts/average_value", average_value, global_step=global_step)
+
+    def get_greedy_action(self, state: np.ndarray) -> int:
+        """
+        Get the greedy action (action with highest probability) for a given state.
+
+        Parameters:
+        - state (np.ndarray): The current state of the environment.
+
+        Returns:
+        - action (int): The action with the highest probability.
+        """
+        # Convert the numpy state to a tensor and normalize
+        state_tensor = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0) / 255.0
+
+        with torch.no_grad():
+            # Get the action logits from the network
+            action_logits, _ = self.network(state_tensor)
+
+            # Create a categorical distribution from the logits
+            dist = torch.distributions.Categorical(logits=action_logits)
+
+            # Greedy action is the mode of the distribution
+            action = dist.mode
+
+        return action.item()
+
+    def set_eval_mode(self) -> None:
+        """
+        Set the network to evaluation mode.
+        
+        Parameters:
+        - None
+
+        Returns:
+        - None
+        """
+        self.network.eval()
+
+    def set_train_mode(self) -> None:
+        """
+        Set the network to training mode.
+
+        Parameters:
+        - None
+
+        Returns:
+        - None
+        """
+        self.network.train()

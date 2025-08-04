@@ -1,7 +1,7 @@
 # configs/dqn_config.yaml
 
 # --- Experiment ---
-total_timesteps: 500000    # Total number of steps to train for (Change to 1_000_000 for full training)
+total_timesteps: 500000    # Total number of steps to train for (Change to 10_000_000 for full training)
 device: "cuda"            # "cuda" or "cpu"
 
 # --- Agent/Network ---

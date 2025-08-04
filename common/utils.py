@@ -15,7 +15,7 @@ import torch
 import yaml
 from gymnasium.wrappers import RecordVideo
 
-from common.wrappers import PreprocessAndStackFrames, RewardWrapper, AtariWrapper
+from common.wrappers import AtariWrapper
 from agents import create_agent
 
 def load_config(config_path: Path) -> Dict[str, Any]:

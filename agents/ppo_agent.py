@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
+import re
 from pathlib import Path
 from typing import Tuple, List, Dict, Any
 from torch.utils.tensorboard import SummaryWriter
@@ -248,30 +249,58 @@ class PPOAgent:
         # Reset the rollout step counter after learning
         self.rollout_step_counter = 0
 
-    def save(self, path: str) -> None:
-        """
-        Save the Actor-Critic network's weights to a file.
+    def save(self, path: Path, timestep: int) -> None:
+        """Saves the agent's state (network, optimizer) to a checkpoint file.
 
         Parameters:
-        - path (str): The file path to save the model.
-
+            - path (Path): The path to the checkpoint file.
+            - timestep (int): The current training timestep, saved for resuming.
+        
         Returns:
-        - None
+            - None
         """
-        torch.save(self.network.state_dict(), path)
+        checkpoint = {
+            'timestep': timestep,
+            'network_state_dict': self.network.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+        }
+        torch.save(checkpoint, path)
 
-    def load(self, path: str) -> None:
-        """
-        Load the Actor-Critic network's weights from a file.
+    def load(self, path: Path) -> int:
+        """Loads an agent's state from a checkpoint for resuming.
+
+        This method is backwards-compatible. It can load old checkpoints (weights
+        only) by inferring the timestep from the filename, and new checkpoints
+        (dict with optimizer state) by reading the timestep from the file.
 
         Parameters:
-        - path (str): The file path to load the model from.
-
+            - path (Path): The path to the checkpoint file.
+        
         Returns:
-        - None
+            - start_timestep (int): The timestep from which to resume training.
         """
-        state_dict = torch.load(path, map_location=self.device)
-        self.network.load_state_dict(state_dict)
+        print(f"Loading checkpoint from {path}...")
+        checkpoint = torch.load(path, map_location=self.device)
+        
+        if isinstance(checkpoint, dict):
+            # --- New Checkpoint Format ---
+            self.network.load_state_dict(checkpoint['network_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_timestep = checkpoint.get('timestep', 0)
+            print(f"Loaded new-style checkpoint. Resuming from timestep {start_timestep}.")
+        else:
+            # --- Old Checkpoint Format (backwards compatibility) ---
+            self.network.load_state_dict(checkpoint)
+            match = re.search(r'step_(\d+)\.pth$', path.name)
+            if match:
+                start_timestep = int(match.group(1))
+                print(f"Loaded old-style checkpoint. Inferred timestep {start_timestep}.")
+                print("NOTE: Optimizer state not loaded. Will start with a fresh optimizer.")
+            else:
+                start_timestep = 0
+                print("Loaded old-style checkpoint. Could not infer timestep. Starting from 0.")
+
+        return start_timestep
 
     def log_metrics(self, writer: SummaryWriter, global_step: int) -> None:
         """

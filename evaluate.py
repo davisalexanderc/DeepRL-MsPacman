@@ -3,9 +3,9 @@ A collection of utility functions for evaluating trained RL agents.
 
 This module provides the core tools needed to run an evaluation pass on a
 trained agent. It includes functions to play a single game, evaluate an agent
-over multiple games, find saved model checkpoints, and calculate summary
-statistics from the evaluation results. These functions are designed to be
-imported and used by a higher-level analysis script or notebook.
+over multiple games, and calculate summary statistics from the evaluation results.
+These functions are designed to be imported and used by a higher-level analysis 
+script or notebook.
 """
 
 import re
@@ -149,33 +149,3 @@ def evaluate_agent(agent: object, env: gym.Env, num_games: int = 10, show_progre
     agent.set_train_mode()  # Reset back to training mode
 
     return all_game_stats_df
-
-def find_checkpoints(run_path: Path) -> list[Path]:
-    """
-    Finds and sorts all model checkpoint files in a directory.
-
-    This function scans a given path for files ending in '.pth' and sorts them
-    numerically based on the training step number in the filename.
-
-    Checkpoints are expected to be named like 'dqn_model_step_1000000.pth'.
-
-    Parameters:
-    - run_path: Path object pointing to the run directory.
-
-    Returns:
-    - checkpoint_files (List[Path]): A list of Path objects for each checkpoint file, sorted by step number.
-    """
-
-    print(f"Searching for checkpoints in: {run_path}")
-    # Ensure the path exists and is a directory
-    if not run_path.exists() or not run_path.is_dir():
-        raise FileNotFoundError(f"Run path {run_path} does not exist or is not a directory.")
-
-    # Find all .pth files in the directory
-    checkpoint_files = list(run_path.glob("*.pth"))
-
-    # Sort checkpoints based on the timestep extracted from the filename
-    checkpoint_files.sort(key=lambda p: int(re.search(r'_(\d+)\.pth$', p.name).group(1)))
-
-    print(f"Found {len(checkpoint_files)} checkpoints in {run_path}")
-    return checkpoint_files

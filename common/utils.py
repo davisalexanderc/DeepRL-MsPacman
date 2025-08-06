@@ -13,6 +13,7 @@ from typing import Dict, Any, Tuple, List, Optional
 import gymnasium as gym
 import torch
 import yaml
+import re
 from gymnasium.wrappers import RecordVideo
 
 from common.wrappers import AtariWrapper
@@ -164,3 +165,43 @@ def generate_video(agent_type: str, run_name: str, checkpoint_timestep: int, vid
     final_video_env.close()
     agent.set_train_mode()
     print(f"--- Video saved successfully to: {video_path} ---")
+
+def find_checkpoints(run_path: Path) -> list[Path]:
+    """
+    Finds and sorts all model checkpoint files in a directory.
+
+    This function scans a given path for files ending in '.pth' and sorts them
+    numerically based on the training step number in the filename.
+
+    Checkpoints are expected to be named like 'dqn_model_step_1000000.pth'.
+
+    Parameters:
+    - run_path: Path object pointing to the run directory.
+
+    Returns:
+    - checkpoint_files (List[Path]): A list of Path objects for each checkpoint file, sorted by step number.
+    """
+
+    print(f"Searching for checkpoints in: {run_path}")
+    # Ensure the path exists and is a directory
+    if not run_path.is_dir():
+        print(f"Warning: Checkpoint directory not found at {run_path}")
+        return []
+
+    checkpoint_files = list(run_path.glob("*.pth"))
+    
+    # Define a helper function to extract the step number from the filename
+    def get_step_from_path(p: Path) -> int:
+        match = re.search(r'step_(\d+)\.pth$', p.name)
+        return int(match.group(1)) if match else -1
+
+    # Filter and sort the checkpoint files based on the step number
+    valid_checkpoints = [p for p in checkpoint_files if get_step_from_path(p) != -1]
+    sorted_checkpoints = sorted(valid_checkpoints, key=get_step_from_path)
+    
+    # If no valid checkpoints are found, return an empty list
+    if not sorted_checkpoints:
+        if checkpoint_files:
+             print(f"Warning: Found .pth files in {run_path}, but none matched the expected naming convention (e.g., '..._step_123.pth').")
+        
+    return sorted_checkpoints

@@ -15,6 +15,7 @@ Examples:
     python train.py --agent ppo --config ./configs/ppo.yaml
 """
 
+from typing import Optional
 import torch
 import time
 import argparse  # Import the argument parsing library
@@ -24,11 +25,11 @@ import gc
 from tqdm import trange
 
 # Import our custom modules
-from common.utils import load_config, setup_environment_and_agent
-from agents import create_agent  # Import our new factory function
+from common.utils import load_config, setup_environment_and_agent, find_checkpoints
+from agents import create_agent 
 
 
-def train_agent(config: dict) -> None:
+def train_agent(config: dict, resume_path: Optional[Path] = None) -> None:
     """
     Initializes and runs the main training loop for the selected agent.
 
@@ -39,6 +40,7 @@ def train_agent(config: dict) -> None:
 
     Parameters:
     - config (dict): Configuration dictionary containing all necessary parameters. 
+    - resume_path (Path | None): Optional path to a previous run's directory to resume training from.
 
     Returns:
     - None
@@ -55,6 +57,17 @@ def train_agent(config: dict) -> None:
     # Create and wrap the environment
     wrapped_env, agent, device = setup_environment_and_agent(config)
 
+    start_timestep = 1
+    if resume_path:
+        checkpoint_paths = find_checkpoints(resume_path)
+        if checkpoint_paths:
+            latest_checkpoint = checkpoint_paths[-1]
+            start_timestep = agent.load(latest_checkpoint) + 1
+            if hasattr(agent, 'timestep'):
+                agent.timestep = start_timestep 
+        else:
+            print(f"Warning: --resume specified but no checkpoints found in {resume_path}.")
+
     # State initialization
     state, info = wrapped_env.reset()
     episode_reward = 0
@@ -66,7 +79,7 @@ def train_agent(config: dict) -> None:
 
     # Progress bar setup
     progress_bar = trange(
-        1,
+        start_timestep,
         config['total_timesteps'] + 1,
         ncols=150,  # Force the bar to be 150 characters wide
         unit="step" # Use 'step' instead of the default 'it'
@@ -113,10 +126,12 @@ def train_agent(config: dict) -> None:
         # --- Agent-Specific Learning ---
         # --- DQN ---
         if config['agent'].lower() == 'dqn':
-            if timestep > config['learning_starts'] and timestep % config['train_frequency'] == 0:
-                loss = agent.learn()
-                if loss is not None:
-                    writer.add_scalar("losses/td_loss", loss, global_step=timestep)
+            if (timestep > config['learning_starts'] and len(agent.replay_buffer) >= agent.batch_size):
+                # Perform learning step every `train_frequency` timesteps
+                if timestep % config['train_frequency'] == 0:
+                    loss = agent.learn()
+                    if loss is not None:
+                        writer.add_scalar("losses/td_loss", loss, global_step=timestep)
         
             if timestep > config['learning_starts'] and timestep % config['target_update_frequency'] == 0:
                 agent.update_target_network()
@@ -132,7 +147,7 @@ def train_agent(config: dict) -> None:
         
         if timestep % config['save_frequency'] == 0:
             checkpoint_path = config["save_path"] / f"{config['agent']}_model_step_{timestep}.pth"
-            agent.save(checkpoint_path)
+            agent.save(checkpoint_path, timestep)
 
         # Garbage collection to free up memory
         if timestep % 250 == 0:
@@ -147,13 +162,11 @@ def train_agent(config: dict) -> None:
     print("--- Training Complete ---")
 
 def parse_args_and_setup_paths(args=None):
-    """Parses command-line arguments and sets up save/log paths.
+    """Parses command-line arguments and sets up config and paths.
 
-    This function defines the command-line interface for the script, parses the
-    provided arguments, and constructs the necessary directory paths for saving
-
-    checkpoints and TensorBoard logs. It ensures the directories exist before
-    returning.
+    This function handles logic for both starting a new run and resuming from an
+    archived one. For resumed runs, it uses the `--resume` path as the single
+    source for logs and model checkpoints.
 
     Parameters:
     - args (list of str, optional): A list of command-line arguments to parse.
@@ -179,22 +192,47 @@ def parse_args_and_setup_paths(args=None):
         required=True,
         help="Path to the configuration YAML file." # e.g., ./configs/dqn.yaml or ./configs/ppo.yaml
     )
+    parser.add_argument(
+        "--resume", 
+        type=Path, 
+        default=None, 
+        help="Path to a run folder to resume training from.") # e.g., ./models/DQN_Run_1
     parsed_args = parser.parse_args(args)
 
-    # Load configuration
-    config = load_config(parsed_args.config)
-    config['agent'] = parsed_args.agent
-
-    # Create a unique run name for this training session
-    run_name = f"{parsed_args.agent.upper()}_{int(time.time())}"  # e.g., DQN_1632345678
-
-    # Set up and create logging and model save paths
     project_root = Path.cwd()
-    config["log_path"] = project_root / "logs" / run_name
-    config["save_path"] = project_root / "models" / run_name
 
-    config["log_path"].mkdir(parents=True, exist_ok=True)
-    config["save_path"].mkdir(parents=True, exist_ok=True)
+    if parsed_args.resume:    # Logic for Resuming a Run
+        run_path = parsed_args.resume.resolve()
+        if not run_path.is_dir():
+            raise FileNotFoundError(f"Resume path not found: {run_path}")
+
+        run_name = run_path.name
+        agent_type = run_name.split('_')[0].lower()
+        
+        config_path = project_root / "configs" / f"{agent_type}_config.yaml"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config for agent '{agent_type}' not found at {config_path}")
+            
+        config = load_config(config_path)
+        config['agent'] = agent_type
+        
+        config["log_path"] = run_path
+        config["save_path"] = run_path
+
+    else:     # Logic for Starting a New Run
+        if not parsed_args.agent or not parsed_args.config:
+            parser.error("--agent and --config are required for a new run.")
+            
+        config = load_config(parsed_args.config)
+        config['agent'] = parsed_args.agent
+        
+        run_name = f"{parsed_args.agent.upper()}_{int(time.time())}"
+        
+        config["log_path"] = project_root / "logs" / run_name
+        config["save_path"] = project_root / "models" / run_name
+        
+        config["log_path"].mkdir(parents=True, exist_ok=True)
+        config["save_path"].mkdir(parents=True, exist_ok=True)
 
     return parsed_args, config
 
@@ -210,8 +248,8 @@ def main():
     Returns:
     - None
     """
-    _, config = parse_args_and_setup_paths()
-    train_agent(config)
+    parsed_args, config = parse_args_and_setup_paths()
+    train_agent(config, resume_path=parsed_args.resume)
 
 if __name__ == "__main__":
     main()

@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
+import re
 import numpy as np
 from pathlib import Path
 from typing import Tuple, List, Dict, Any
@@ -164,17 +165,23 @@ class DQNAgent:
 
         self.q_target_net.load_state_dict(self.q_policy_net.state_dict())
 
-    def save(self, path: str) -> None:
-        """
-        Save the policy network's weights to a file.
+    def save(self, path: Path, timestep: int) -> None:
+        """Saves the agent's state (networks, optimizer) to a checkpoint file.
 
         Parameters:
-        - path (str): The file path to save the model.
-
+            - path (Path): The path to the checkpoint file.
+            - timestep (int): The current training timestep, saved for resuming.
+        
         Returns:
-        - None
+            - None
         """
-        torch.save(self.q_policy_net.state_dict(), path)
+        checkpoint = {
+            'timestep': timestep,
+            'network_state_dict': self.q_policy_net.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            #'replay_buffer': self.replay_buffer.buffer,
+        }
+        torch.save(checkpoint, path)
 
     def get_greedy_action(self, state: np.ndarray) -> int:
         """
@@ -235,19 +242,46 @@ class DQNAgent:
         
         writer.add_scalar("charts/epsilon", epsilon, global_step=global_step)
 
-    def load(self, path: str) -> None:
-        """
-        Load the policy network's weights from a file.
+    def load(self, path: Path) -> int:
+        """Loads an agent's state from a checkpoint for resuming.
+
+        This method is backwards-compatible. It can load old checkpoints (weights
+        only) by inferring the timestep from the filename, and new checkpoints
+        (dict with optimizer state) by reading the timestep from the file.
 
         Parameters:
-        - path (str): The file path to load the model from.
-
+            - path (Path): The path to the checkpoint file.
+        
         Returns:
-        - None
+            - start_timestep (int): The timestep from which to resume training.
         """
-        state_dict = torch.load(path, map_location=self.device)
-        self.q_policy_net.load_state_dict(state_dict)
-        self.q_target_net.load_state_dict(state_dict)
+        print(f"Loading checkpoint from {path}...")
+        checkpoint = torch.load(path, map_location=self.device)
+        
+        if isinstance(checkpoint, dict):
+            # New Checkpoint Format
+            self.q_policy_net.load_state_dict(checkpoint['network_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_timestep = checkpoint.get('timestep', 0)
+
+            print(f"Loaded new-style checkpoint. Resuming from timestep {start_timestep}.")
+        else:
+            # Old Checkpoint Format (backwards compatibility, weights only)
+            self.q_policy_net.load_state_dict(checkpoint)
+            match = re.search(r'step_(\d+)\.pth$', path.name)
+            
+            if match:
+                start_timestep = int(match.group(1))
+                print(f"Loaded old-style checkpoint. Inferred timestep {start_timestep}.")
+                print("NOTE: Optimizer state not loaded. Will start with a fresh optimizer.")
+            else:
+                start_timestep = 0
+                print("Loaded old-style checkpoint. Could not infer timestep. Starting from 0.")
+
+        # Always sync the target network after loading new weights to the policy network
+        self.q_target_net.load_state_dict(self.q_policy_net.state_dict())
+
+        return start_timestep
 
     def set_eval_mode(self) -> None:
         """

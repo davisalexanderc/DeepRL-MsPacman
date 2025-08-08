@@ -165,12 +165,16 @@ class DQNAgent:
 
         self.q_target_net.load_state_dict(self.q_policy_net.state_dict())
 
-    def save(self, path: Path, timestep: int) -> None:
+    def save(self, path: Path, timestep: int, include_buffer: bool = False) -> None:
         """Saves the agent's state (networks, optimizer) to a checkpoint file.
+
+        The replay buffer is only included if `include_buffer` is True. This
+        allows for small periodic checkpoints and a large, complete final one.
 
         Parameters:
             - path (Path): The path to the checkpoint file.
             - timestep (int): The current training timestep, saved for resuming.
+            - include_buffer (bool): Whether to include the replay buffer in the checkpoint.
         
         Returns:
             - None
@@ -179,8 +183,10 @@ class DQNAgent:
             'timestep': timestep,
             'network_state_dict': self.q_policy_net.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
-            #'replay_buffer': self.replay_buffer.buffer,
         }
+        if include_buffer:
+            checkpoint['replay_buffer'] = self.replay_buffer.buffer
+
         torch.save(checkpoint, path)
 
     def get_greedy_action(self, state: np.ndarray) -> int:
@@ -263,6 +269,14 @@ class DQNAgent:
             self.q_policy_net.load_state_dict(checkpoint['network_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             start_timestep = checkpoint.get('timestep', 0)
+
+            # Check if the buffer exists in the file and load it.
+            if 'replay_buffer' in checkpoint:
+                self.replay_buffer.buffer = checkpoint['replay_buffer']
+                print(f"Loaded replay buffer with {len(self.replay_buffer)} experiences.")
+            else:
+                # If it doesn't exist, we'll rely on the train.py logic to repopulate it.
+                print("NOTE: Replay buffer not found in checkpoint. A new buffer will be populated.")
 
             print(f"Loaded new-style checkpoint. Resuming from timestep {start_timestep}.")
         else:

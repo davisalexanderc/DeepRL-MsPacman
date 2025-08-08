@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import random
+import pickle
 import re
 import numpy as np
 from pathlib import Path
@@ -185,7 +186,10 @@ class DQNAgent:
             'optimizer_state_dict': self.optimizer.state_dict(),
         }
         if include_buffer:
-            checkpoint['replay_buffer'] = self.replay_buffer.buffer
+            buffer_path = path.with_suffix('.pkl')
+            print(f"Saving replay buffer separately to: {buffer_path}")
+            with open(buffer_path, 'wb') as f:
+                pickle.dump(self.replay_buffer.buffer, f)
 
         torch.save(checkpoint, path)
 
@@ -271,8 +275,11 @@ class DQNAgent:
             start_timestep = checkpoint.get('timestep', 0)
 
             # Check if the buffer exists in the file and load it.
-            if 'replay_buffer' in checkpoint:
-                self.replay_buffer.buffer = checkpoint['replay_buffer']
+            bufffer_path = path.with_suffix('.pkl')
+            if bufffer_path.exists():
+                print(f"Loading replay buffer from {bufffer_path}...")
+                with open(bufffer_path, 'rb') as f:
+                    self.replay_buffer.buffer = pickle.load(f)
                 print(f"Loaded replay buffer with {len(self.replay_buffer)} experiences.")
             else:
                 # If it doesn't exist, we'll rely on the train.py logic to repopulate it.

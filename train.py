@@ -147,7 +147,16 @@ def train_agent(config: dict, resume_path: Optional[Path] = None) -> None:
         
         if timestep % config['save_frequency'] == 0:
             checkpoint_path = config["save_path"] / f"{config['agent']}_model_step_{timestep}.pth"
-            agent.save(checkpoint_path, timestep)
+
+            if config['agent'].lower() == 'dqn':    
+                is_final_save = (timestep == config['total_timesteps'])  # For final save
+                if is_final_save:
+                    print(f"Final save at timestep {timestep}. Including replay buffer in checkpoint.")
+                # Save the agent's state, including the replay buffer if it's the final save
+                agent.save(checkpoint_path, timestep, include_buffer=is_final_save)
+                
+            elif config['agent'].lower() == 'ppo':
+                agent.save(checkpoint_path, timestep)
 
         # Garbage collection to free up memory
         if timestep % 250 == 0:

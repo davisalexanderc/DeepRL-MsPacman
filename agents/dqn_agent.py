@@ -271,10 +271,11 @@ class DQNAgent:
         
         if isinstance(checkpoint, dict):
             # New Checkpoint Format
-            self.q_policy_net.load_state_dict(checkpoint['network_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.q_policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+            self.q_target_net.load_state_dict(checkpoint['target_net_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             start_timestep = checkpoint.get('timestep', 0)
+            print(f"Loaded new-style checkpoint. Resuming from timestep {start_timestep}.")
 
             # Check if the buffer exists in the file and load it.
             bufffer_path = path.with_suffix('.pkl')

@@ -182,7 +182,8 @@ class DQNAgent:
         """
         checkpoint = {
             'timestep': timestep,
-            'network_state_dict': self.q_policy_net.state_dict(),
+            'policy_net_state_dict': self.q_policy_net.state_dict(),
+            'target_net_state_dict': self.q_target_net.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
         }
         if include_buffer:
@@ -272,6 +273,7 @@ class DQNAgent:
             # New Checkpoint Format
             self.q_policy_net.load_state_dict(checkpoint['network_state_dict'])
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             start_timestep = checkpoint.get('timestep', 0)
 
             # Check if the buffer exists in the file and load it.
@@ -289,6 +291,7 @@ class DQNAgent:
         else:
             # Old Checkpoint Format (backwards compatibility, weights only)
             self.q_policy_net.load_state_dict(checkpoint)
+            self.q_target_net.load_state_dict(self.q_policy_net.state_dict())
             match = re.search(r'step_(\d+)\.pth$', path.name)
             
             if match:

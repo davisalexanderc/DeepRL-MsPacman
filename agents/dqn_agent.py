@@ -266,14 +266,27 @@ class DQNAgent:
         Returns:
             - start_timestep (int): The timestep from which to resume training.
         """
+        if not isinstance(path, Path):
+            path = Path(path)
+
         print(f"Loading checkpoint from {path}...")
         checkpoint = torch.load(path, map_location=self.device)
         
-        if isinstance(checkpoint, dict):
-            # New Checkpoint Format
+        if isinstance(checkpoint, dict) and 'policy_net_state_dict' in checkpoint:
+            # Policy Network
             self.q_policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
-            self.q_target_net.load_state_dict(checkpoint['target_net_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            
+            # Target Network
+            if 'target_net_state_dict' in checkpoint:
+                self.q_target_net.load_state_dict(checkpoint['target_net_state_dict'])
+
+            # Optimizer
+            if 'optimizer_state_dict' in checkpoint:
+                self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            
+            #self.q_policy_net.load_state_dict(checkpoint['policy_net_state_dict'])
+            #self.q_target_net.load_state_dict(checkpoint['target_net_state_dict'])
+            #self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             start_timestep = checkpoint.get('timestep', 0)
             print(f"Loaded new-style checkpoint. Resuming from timestep {start_timestep}.")
 
